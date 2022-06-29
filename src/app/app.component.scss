@@ -1,0 +1,26 @@
+table {
+  width: 100%;
+}
+
+th.mat-sort-header-sorted {
+  color: black;
+}
+input {
+  width: 30%;
+  height: 20px;
+  border-radius: 6px;
+  /* border: grey; */
+  padding: 20px 20px;
+  margin: 30px 10px;
+}
+mat-grid-tile {
+    background: lightblue;
+}
+mat-icon{
+    font-size: 30px;
+    cursor: pointer;
+    margin: 5px 10px;
+}
+.wrapper{
+    padding: 30px;
+}

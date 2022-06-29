@@ -1,0 +1,24 @@
+::-webkit-input-placeholder {
+  /* Edge */
+  color: #f8f9fc;
+  font-size: 14px;
+}
+
+:-ms-input-placeholder {
+  /* Internet Explorer 10-11 */
+  color: #f8f9fc;
+  font-size: 14px;
+}
+
+::placeholder {
+  color: #f8f9fc;
+  font-size: 14px;
+}
+
+.bg-user {
+  background-image: url("../../assets/img/bg.png");
+  height: 100vh;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}

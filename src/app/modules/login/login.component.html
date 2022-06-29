@@ -1,0 +1,107 @@
+<div class="container-fluid bg-user">
+  <div class="container">
+    <!-- Outer Row -->
+    <div class="row justify-content-center">
+      <div class="col-xl-5 col-lg-5 col-md-6" style="margin-top: 200px">
+        <div
+          class="card o-hidden border-0 shadow-lg my-5"
+          style="border-radius: 20px"
+        >
+          <div class="card-body p-0">
+            <div class="row">
+              <div class="col-lg-12">
+                <div class="p-4">
+                  <div class="text-center">
+                    <h3 class="h5 text-gray-900 mb-4" style="font-weight: bold">
+                      Login
+                    </h3>
+                  </div>
+                  <form class="user" [formGroup]="loginForm" (ngSubmit)="onSubmit()">
+                    <div class="form-group">
+                      <input
+                        type="text"
+                        class="form-control"
+                        id="exampleInputEmail"
+                        aria-describedby="emailHelp"
+                        placeholder="Username"
+                        formControlName="username"
+                      />
+                      <div
+                        *ngIf="submitted && f['username'].invalid"
+                      >
+                        <div
+                          *ngIf="
+                            f['username'].errors &&
+                            f['username'].errors['required']
+                          "
+                        >
+                          <p class="text text-danger small">Username is required</p>
+                        </div>
+                        <div
+                          *ngIf="
+                            f['username'].errors &&
+                            f['username'].errors['pattern']
+                          "
+                        >
+                          <p class="text text-danger small">Username is required and alphanumeric without spaces</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="form-group">
+                      <input
+                        type="password"
+                        class="form-control"
+                        id="exampleInputPassword"
+                        placeholder="Password"
+                        formControlName="password"
+                      />
+                      <div
+                        *ngIf="submitted && f['password'].invalid"
+                      >
+                        <div
+                          *ngIf="
+                            f['password'].errors &&
+                            f['password'].errors['required']
+                          "
+                        >
+                          <p class="text text-danger small">Password is required</p>
+                        </div>
+                        <div
+                          *ngIf="
+                            f['password'].errors &&
+                            f['password'].errors['pattern']
+                          "
+                        >
+
+                          <p class="text text-danger small">Password is required and alphanumeric with at least 1 special character</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="form-group">
+                      <div
+                        class="d-flex justify-content-end align-items-center"
+                      >
+                        <button
+                          type="submit"
+                          class="btn"
+                          style="
+                            color: white;
+                            background: black;
+                            padding: 5px 20px;
+                          "
+                        >
+                          Sign in
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
