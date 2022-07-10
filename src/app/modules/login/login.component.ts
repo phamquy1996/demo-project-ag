@@ -33,7 +33,7 @@ export class LoginComponent implements OnInit {
         [
           Validators.required,
           Validators.pattern(
-            /(?=.*[a-z])(?=.*\d)(?=.*[@#$%^&+=])[a-z\d-@#$%^&+=]*$/i
+            /(?=.*[a-z])(?=.*\d)(?=.*[@#$%^&+=])[a-z\d-@#$%^&+*=]*$/i
           ),
         ],
       ],
