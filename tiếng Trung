@@ -1,0 +1,181 @@
+在本段中，我们将解释每个关键词的含义并翻译成英文。
+
+教程 - jiàochéng - Tutorial
+使用 - shǐyòng - Use, Utilize
+Docker - Docker (保持原样) - Docker (keep as-is)
+部署 - bùshǔ - Deploy, Deployment
+基于 - jīyú - Based on
+CRUD - CRUD (保持原样) - CRUD (keep as-is)
+应用程序 - yìngyòng chéngxù - Application, App
+Node.js - Node.js (保持原样) - Node.js (keep as-is)
+计算机 - jìsuànjī - Computer
+目录 - mùlù - Directory, Folder
+初始化 - chūshǐhuà - Initialize, Initialization
+项目 - xiàngmù - Project
+安装 - ānzhuāng - Install, Installation
+Express - Express (保持原样) - Express (keep as-is)
+依赖项 - yīlái xiàng - Dependency, Dependencies编写 - biānxiě - Write, Compose
+代码 - dàimǎ - Code
+处理 - chǔlǐ - Handle, Process
+操作 - cāozuò - Operation, Action
+Dockerfile - Dockerfile (保持原样) - Dockerfile (keep as-is)
+容器 - róngqì - Container
+配置 - pèizhì - Configuration
+镜像 - jìngxiàng - Image
+构建 - gòujiàn - Build, Construct
+运行 - yùnxíng - Run, Execute
+访问 - fǎngwèn - Access, Visit
+浏览器 - liúlǎn qì - Browser
+成功 - chénggōng - Successful, Success
+在本教程中，我们将讨论如何使用 Docker 部署一个基于 Node.js 的 CRUD 应用程序。
+Trong hướng dẫn này, chúng tôi sẽ thảo luận về cách triển khai một ứng dụng CRUD dựa trên Node.js bằng Docker.快速入门
+欢迎来到 React 文档！本章节将为你介绍，你每天都会使用的 80% 的 React 概念。
+
+你将会学习到
+
+如何创建和嵌套组件
+如何添加标签和样式
+如何显示数据
+如何渲染条件和列表
+如何对事件做出响应并更新界面
+如何在组件间共享数据
+创建和嵌套组件 
+
+React 应用程序是由 组件 组成的。一个组件是 UI（用户界面）的一部分，它拥有自己的逻辑和外观。组件可以小到一个按钮，也可以大到整个页面。
+
+React 组件是返回标签的 JavaScript 函数   
+dịch mỗi từ đoạn văn trên sang tiếng anh快速入门 - kuàisù rùmén - Quick Start
+欢迎来到 - huānyíng láidào - Welcome to
+React 文档 - React wéndàng - React Documentation
+本章节 - běn zhāngjié - This chapter
+将为你介绍 - jiāng wèi nǐ jièshào - Will introduce to you
+你每天都会使用 - nǐ měitiān dōuhuì shǐyòng - You will use every day
+80% 的 - 80% de - 80% of
+React 概念 - React gàiniàn - React concepts
+
+你将会学习到 - nǐ jiāng huì xuéxídào - You will learn
+如何创建 - rúhé chuàngjiàn - How to create
+和嵌套 - hé qiàntáo - And nest
+组件 - zǔjiàn - Components
+如何添加 - rúhé tiānjiā - How to add
+标签 - biāoqiān - Tags, Labels
+和样式 - hé yàngshì - And styles
+如何显示 - rúhé xiǎnshì - How to display
+数据 - shùjù - Data
+如何渲染 - rúhé huàndǎo - How to render
+条件 - tiáojiàn - Conditions
+和列表 - hé lièbiǎo - And lists
+如何对事件 - rúhé duì shìjiàn - How to handle events
+做出响应 - zuòchū xiǎngyìng - Respond to
+并更新 - bìng gēngxīn - And update
+界面 - jièmiàn - Interface
+如何在组件间 - rúhé zài zǔjiàn jiān - How to share between components
+共享数据 - gòngxiǎng shùjù - Share data
+
+创建和嵌套组件 - chuàngjiàn hé qiàntáo zǔjiàn - Create and nest components
+React 应用程序 - React yìngyòng chéngxù - React application
+是由 - shì yóu - Is composed of
+组成的 - zǔchéng de - Composed of
+一个组件 - yígè zǔjiàn - A component
+是 UI - shì UI - Is UI (User Interface)
+的一部分 - de yíbùfen - A part of
+它拥有自己的 - tā yōngyǒu zìjǐ de - It has its own
+逻辑 - luójí - Logic
+和外观 - hé wàiguān - And appearance
+组件可以小到一个按钮 - zǔjiàn kěyǐ xiǎo dào yígè ànniǔ - Components can be as small as a button
+也可以大到整个页面 - yě kěyǐ dà dào zhěnggè yèmiàn - Or as large as an entire page
+
+React 组件 - React zǔjiàn - React components
+是返回标签的 - shì fǎnhuí biāoqiān de - Are JavaScript functions returning tags
+JavaScript 函数 - JavaScript hán
+
+
+
+
+phamqucntta11@gmail.com
+trả lời tiếp
+
+shù - JavaScript functions
+
+以上是提到的中文关键词和它们的英文翻译。现在，我将翻译整段文字为英文。
+
+Quick Start
+Welcome to the React documentation! This chapter will introduce you to 80% of the React concepts you'll use every day.
+
+You will learn:
+
+How to create and nest components
+How to add tags and styles
+How to display data
+How to render conditions and lists
+How to respond to events and update the interface
+How to share data between components
+Create and nest components
+
+React applications are composed of components. A component is a part of the user interface (UI) that has its own logic and appearance. Components can be as small as a button or as large as an entire page.
+
+React components are JavaScript functions that return tags.
+
+
+
+
+phamqucntta11@gmail.com
+至此，你已经声明了 MyButton，你可以把它嵌套到另一个组件中：
+
+export default function MyApp() {
+  return (
+    <div>
+      <h1>Welcome to my app</h1>
+      <MyButton />
+    </div>
+  );
+}
+你可能已经注意到 <MyButton /> 是以大写字母开头的。你可以根据此来区分 React 组件。React 组件必须以大写字母开头，而 HTML 标签则必须是小写字母。
+dịch mỗi từ sau sang tiếng anh
+来看下效果：
+
+至此 - zhìcǐ - So far, Up to now
+你已经 - nǐ yǐjīng - You have
+声明 - shēngmíng - Declared
+了 - le (particle, no English equivalent)
+MyButton - MyButton (keep as-is)
+你可以 - nǐ kěyǐ - You can
+把 - bǎ (preposition, no English equivalent)
+它 - tā - It
+嵌套 - qiàntáo - Nest
+到 - dào - In, Into
+另一个 - lìng yígè - Another
+组件 - zǔjiàn - Component
+中 - zhōng - Inside
+
+export default function MyApp() {
+return (
+<div>
+<h1>Welcome to my app</h1>
+<MyButton />
+</div>
+);
+}
+
+你可能已经 - nǐ kěnéng yǐjīng - You might have
+注意到 - zhùdào - Noticed
+<MyButton /> - <MyButton /> (keep as-is)
+是以 - shì yǐ - Starts with
+大写字母 - dàxiě zìmǔ - Capital letter
+开头的 - kāitóu de - Starting with
+你可以 - nǐ kěyǐ - You can
+根据 - gēnjù - According to
+此 - cǐ - This
+来 - lái - To
+区分 - qūfēn - Distinguish
+React 组件 - React zǔjiàn - React components
+React 组件必须 - React zǔjiàn bìxū - React components must
+以大写字母开头 - yǐ dàxiě zìmǔ kāitóu - Start with a capital letter
+而 - ér - While, Whereas
+HTML 标签 - HTML biāoqiān - HTML tags
+则 - zé - Then
+必须 - bìxū - Must
+是 - shì - Be
+小写字母 - xiǎoxiě zìmǔ - Lowercase letter
+
+来看下效果 - lái kàn xià xiàoguǒ - Let's see the effect
