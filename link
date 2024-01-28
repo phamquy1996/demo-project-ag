@@ -1,1 +1,29 @@
 https://www.figma.com/file/pOE3VMORVjNiH7okdIoYIi/Viettel-Digital-(SMO-Lite)?type=design&node-id=3266-14266&mode=design&t=6WuzsecOePAlkzqe-0
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <div id="content" style="white-space: pre-line; word-wrap: break-word;"></div>
+
+    <script>
+        function convertTextToHTML(text) {
+            const urlRegex = /(https?:\/\/[^\s]+)/g;
+            return text.replace(urlRegex, (url) => {
+                return `<a href="${url}" target="_blank">${url}</a>`;
+            });
+        }
+
+        const originalText = `🔸 TTCK Mỹ \n http://ahah.com tăng trưởng mạnh trở lại. \n 🔸 Tăng trưởng kinh tế Việt Nam quý sau cao hơn quý trước. 🔸 Nhận định thị trường và gợi ý danh mục của VPS. Nhà đầu tư tham khảo toàn bộ nội dung Bản tin sáng tại đây: http://www.vps.com.vn/Sites/QuoteVN/SiteRoot/ntnldt/Morning2601.png 👉 Đăng ký tham gia ngay chuỗi chia sẻ kiến thức "Mở lối hành trình đầu tư" tại đây: https://shorturl.at/eHLW2`;
+
+        const htmlContent = convertTextToHTML(originalText);
+
+        document.getElementById('content').innerHTML = htmlContent;
+    </script>
+</body>
+</html>
+
