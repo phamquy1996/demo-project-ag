@@ -1,430 +1,57 @@
-https://www.figma.com/file/pOE3VMORVjNiH7okdIoYIi/Viettel-Digital-(SMO-Lite)?type=design&node-id=3266-14266&mode=design&t=6WuzsecOePAlkzqe-0
+import React, { useRef } from 'react';
+import JoditEditor from "jodit-react";
+import axios from 'axios';
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-</head>
-<body>
-    <div id="content" style="white-space: pre-line; word-wrap: break-word;"></div>
+const MyEditor = () => {
+  const editor = useRef(null);
+  
+  const config = {
+    uploader: {
+      insertImageAsBase64URI: false, // Disable base64 image to handle custom uploads
+      url: '/upload-image', // Set this to your server's image upload URL
+      format: 'json',
+      method: 'POST',
+      filesVariableName: function () {
+        return 'files';
+      },
+      process: function (resp) {
+        // Assuming your response contains the uploaded image URL
+        return {
+          files: resp.data.fileUrl, // Adjust this according to your API response format
+        };
+      },
+    },
+    events: {
+      afterPaste: function (e, editor) {
+        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+        for (let item of items) {
+          if (item.type.indexOf("image") === 0) {
+            const file = item.getAsFile();
+            const formData = new FormData();
+            formData.append('files', file);
 
-    <script>
-        function convertTextToHTML(text) {
-            const urlRegex = /(https?:\/\/[^\s]+)/g;
-            return text.replace(urlRegex, (url) => {
-                return `<a href="${url}" target="_blank">${url}</a>`;
-            });
+            // Upload the image using axios or your preferred HTTP client
+            axios.post('/upload-image', formData)
+              .then(response => {
+                const imageUrl = response.data.fileUrl; // Adjust based on response
+                editor.s.insertImage(imageUrl); // Insert uploaded image URL
+              })
+              .catch(error => {
+                console.error('Image upload failed:', error);
+              });
+          }
         }
-
-        const originalText = `🔸 TTCK Mỹ \n http://ahah.com tăng trưởng mạnh trở lại. \n 🔸 Tăng trưởng kinh tế Việt Nam quý sau cao hơn quý trước. 🔸 Nhận định thị trường và gợi ý danh mục của VPS. Nhà đầu tư tham khảo toàn bộ nội dung Bản tin sáng tại đây: http://www.vps.com.vn/Sites/QuoteVN/SiteRoot/ntnldt/Morning2601.png 👉 Đăng ký tham gia ngay chuỗi chia sẻ kiến thức "Mở lối hành trình đầu tư" tại đây: https://shorturl.at/eHLW2`;
-
-        const htmlContent = convertTextToHTML(originalText);
-
-        document.getElementById('content').innerHTML = htmlContent;
-    </script>
-</body>
-</html>
-
-[
-    {
-        "title": "Khuyến nghị đầu tư",
-        "body": "Đến hết phiên giao dịch buổi sáng, HNX đang có 86 mã tăng, 63 mã tham chiếu và 40 mã giảm.\n\nUPCOM đang có 140 mã tăng, 113 mã tham chiếu và 92 mã giảm.\n\nVNINDEX đang có 254 mã tăng, 113 mã tham chiếu và 172 mã giảm.\n\nVN30 đang có 20 mã tăng, 4 mã tham chiếu và 6 mã giảm.\n\n",
-        "body_detail": "Đến hết phiên giao dịch buổi sáng, HNX đang có 86 mã tăng, 63 mã tham chiếu và 40 mã giảm.\n\nUPCOM đang có 140 mã tăng, 113 mã tham chiếu và 92 mã giảm.\n\nVNINDEX đang có 254 mã tăng, 113 mã tham chiếu và 172 mã giảm.\n\nVN30 đang có 20 mã tăng, 4 mã tham chiếu và 6 mã giảm.\n\n\n\nTham khảo: https://banggia.vps.com.vn/",
-        "link": "https://banggia.vps.com.vn/",
-        "listacc": "",
-        "type": "600",
-        "group_type": "2",
-        "code": "10060001",
-        "devicetype": "all",
-        "status": 1,
-        "level": "1",
-        "datetimecreate": "11:35 | 26/01/2024",
-        "datetimelastupd": "11:35 | 26/01/2024",
-        "image": "https://appnotification.vps.com.vn/assets/images/khuyen_nghi_dau_tu.jpg",
-        "imagedt": "https://appnotification.vps.com.vn/assets/images/detail/4.jpg",
-        "key": "2024012611marketsessionview",
-        "createDate": "26/01/2024"
-    },
-    {
-        "body": "TTCK Mỹ tăng trưởng mạnh trở lại.",
-        "body_detail": "🔸 TTCK Mỹ tăng trưởng mạnh trở lại.\n\n🔸 Tăng trưởng kinh tế Việt Nam quý sau cao hơn quý trước.\n\n🔸 Nhận định thị trường và gợi ý danh mục của VPS.\n\nNhà đầu tư tham khảo toàn bộ nội dung Bản tin sáng tại đây: http://www.vps.com.vn/Sites/QuoteVN/SiteRoot/ntnldt/Morning2601.png\n\n👉 Đăng ký tham gia ngay chuỗi chia sẻ kiến thức \"Mở lối hành trình đầu tư\" tại đây: https://shorturl.at/eHLW2",
-        "code": "10080001",
-        "devicetype": "all",
-        "group_type": "2",
-        "image": "https://appnotification.vps.com.vn/assets/images/imgUploader_1706233994441_MorningOut.jpg",
-        "imagedt": "https://appnotification.vps.com.vn/assets/images/imgUploader_1706233994524_MorningIn.jpg",
-        "ispush": 1,
-        "level": 1,
-        "listacc": "",
-        "status": 1,
-        "title": "Bản tin sáng 26/01/2024",
-        "type": 800,
-        "datetimecreate": "8:53 | 26/01/2024",
-        "datetimelastupd": "08:54 | 26/01/2024",
-        "key": "800_minhna_20240126_85314640",
-        "csvKey": "",
-        "flag_video_background_popup": false,
-        "createDate": "26/01/2024"
-    },
-    {
-        "type": 800,
-        "level": 1,
-        "devicetype": "all",
-        "title": "Nhận định HĐTL VN30 ngày 26/01/2024",
-        "body": "Nhà đầu tư quan tâm vị thế Long nên lưu ý stoploss tại vùng 1,174 – 1,175. Nhà đầu tư quan tâm vị thế Short nên lưu ý stoploss tại vùng 1,191 – 1,192.",
-        "body_detail": "· Trong phiên giao dịch ngày 25/01, HĐTL VN30 mở cửa tăn điểm nhẹ đầu phiên sau đó nhanh chóng điều chỉnh giảm và sideway biên độ hẹp quanh mốc tham chiếu. Chỉ số sau đó tiếp tục kịch biển biến động sideway quanh tham chiếu trong hầu hết phiên chiều, và kết phiên trong sắc đỏ nhẹ. HĐTL VN30 đóng cửa tại mức 1,180.5 điểm, giảm 0.2 điểm so với tham chiếu, tương ứng với mức giảm 0.02%.\n\n· Basis dương +2.98 điểm vào thời điểm cuối phiên.\n(Basis = Giá hợp đồng tương lai – chỉ số VN30 cơ sở)\n\n· Khối lượng giao dịch của HĐTL F1M giảm 9.53% với 182,718 hợp đồng được khớp lệnh trong phiên.\n· Số lượng hợp đồng mở (OI) giảm 9.83% với 48,531 hợp đồng.\n· Các mã cổ phiếu đóng góp chính vào biến động của chỉ số VN30 bao gồm: MWG (+0.90 điểm), TCB (-0.57 điểm), STB (-0.47 điểm), VHM (-0.43 điểm), VIC (-0.40 điểm),…\n\nĐánh giá kỹ thuật:\nTrên biểu đồ khung H1, HĐTL VN30 đang trong nhịp điều chỉnh giảm ngắn hạn, sau khi giá phá vỡ khu vực hỗ trợ tại đường trendline tăng trước đó.\n\nNhà đầu tư quan tâm vị thế Long nên lưu ý stoploss tại vùng 1,174 – 1,175. Nhà đầu tư quan tâm vị thế Short nên lưu ý stoploss tại vùng 1,191 – 1,192.\n\nGiao dịch chứng khoán phái sinh là hoạt động đầu tư sử dụng đòn bẩy cao, nhà đầu tư cần lưu ý quản lý vốn tốt để bảo vệ tài khoản của mình.\n\n👉 Đăng ký tham gia ngay chuỗi chia sẻ kiến thức \"Mở lối hành trình đầu tư\" tại đây: https://shorturl.at/eHLW2",
-        "listacc": "",
-        "ispush": 0,
-        "csvKey": "",
-        "code": "10080001",
-        "image": "https://appnotification.vps.com.vn/assets/images/imgUploader_1706233863579_ImageOutchung.png",
-        "imagedt": "https://appnotification.vps.com.vn/assets/images/imgUploader_1706233863951_ps.jpg",
-        "status": 1,
-        "datetimecreate": "8:51 | 26/01/2024",
-        "datetimelastupd": "8:51 | 26/01/2024",
-        "group_type": "2",
-        "key": "800_minhna_20240126_85104360",
-        "createDate": "26/01/2024"
-    },
-    {
-        "type": 600,
-        "level": 1,
-        "devicetype": "so",
-        "title": "Khuyến nghị đầu tư",
-        "body": "Tổng hợp chỉ số chứng khoán và giá cả hàng hóa quốc tế đầu ngày (26/01/2024)",
-        "body_detail": "🔸 Tổng hợp chỉ số chứng khoán đầu ngày (26/01/2024)\n\n• Dow Jones (Mỹ): 38.049,13 điểm; +242,74 điểm;+0,64%\n\n• S&P 500 (Mỹ): 4.894,16 điểm; +25,61điểm; +0,53%\n\n• Nasdaq Composite (Mỹ): 15.510,50 điểm; +28,58 điểm; +0,18%\n\n• Nikkei 225 (Nhật): 36.236,47 điểm;+9,99 điểm; +0,03%\n\n• Shanghai Composite (Trung Quốc): 2.906,11 điểm; +85,34 điểm; +3,03%\n\n🔸 Tổng hợp giá cả hàng hóa đầu ngày (26/01/2024)\n\n• Dầu thô WTI: 77,36 USD/thùng; +2,27 USD; +3,02%\n\n• Dầu thô Brent: 82,43 USD/thùng; +2,39 USD; +2,99%\n\n• Khí thiên nhiên: 2,57 USD/MMBtu; -0,07 USD; -2,65%\n\n• Vàng: 2019,75 USD/oz; +7,16 USD; +0,36%\n\n• Đồng: 3,86 USD/lb; -0,01 USD; -0,4%\n\n🔸 Tổng hợp chỉ số trong nước (26/01/2024)\n\n• Vàng SJC: Mua vào: 74.000.000 VND/lượng; Bán ra: 76.600.000 VND/lượng\n\n• USD: Mua vào: 24.494 VND; Bán ra: 24.716 VND\n\n• Lãi suất tiết kiệm 1 năm Vietcombank: 4,7%/năm",
-        "listacc": "",
-        "ispush": 0,
-        "csvKey": "",
-        "code": "10060001",
-        "image": "https://appnotification.vps.com.vn/assets/images/imgUploader_1706233762433_ImageOutchung.png",
-        "imagedt": "https://appnotification.vps.com.vn/assets/images/imgUploader_1706233762474_DetailImagechung.jpg",
-        "status": 1,
-        "datetimecreate": "8:49 | 26/01/2024",
-        "datetimelastupd": "8:49 | 26/01/2024",
-        "group_type": "2",
-        "key": "600_minhna_20240126_84922753",
-        "createDate": "26/01/2024"
-    },
-    {
-        "title": "Khuyến nghị đầu tư",
-        "body": "Đến hết phiên giao dịch buổi sáng, HNX đang có 67 mã tăng, 65 mã tham chiếu và 53 mã giảm.\n\nUPCOM đang có 119 mã tăng, 85 mã tham chiếu và 81 mã giảm.\n\nVNINDEX đang có 130 mã tăng, 109 mã tham chiếu và 275 mã giảm.\n\nVN30 đang có 5 mã tăng, 6 mã tham chiếu và 19 mã giảm.\n\n",
-        "body_detail": "Đến hết phiên giao dịch buổi sáng, HNX đang có 67 mã tăng, 65 mã tham chiếu và 53 mã giảm.\n\nUPCOM đang có 119 mã tăng, 85 mã tham chiếu và 81 mã giảm.\n\nVNINDEX đang có 130 mã tăng, 109 mã tham chiếu và 275 mã giảm.\n\nVN30 đang có 5 mã tăng, 6 mã tham chiếu và 19 mã giảm.\n\n\n\nTham khảo: https://banggia.vps.com.vn/",
-        "link": "https://banggia.vps.com.vn/",
-        "listacc": "",
-        "type": "600",
-        "group_type": "2",
-        "code": "10060001",
-        "devicetype": "all",
-        "status": 1,
-        "level": "1",
-        "datetimecreate": "11:35 | 25/01/2024",
-        "datetimelastupd": "11:35 | 25/01/2024",
-        "image": "https://appnotification.vps.com.vn/assets/images/khuyen_nghi_dau_tu.jpg",
-        "imagedt": "https://appnotification.vps.com.vn/assets/images/detail/4.jpg",
-        "key": "2024012511marketsessionview",
-        "createDate": "25/01/2024"
-    },
-    {
-        "type": 800,
-        "level": 1,
-        "devicetype": "all",
-        "title": "Bản tin sáng 25/01/2024",
-        "body": "TTCK Mỹ giao dịch trái chiều.",
-        "body_detail": "🔸 TTCK Mỹ giao dịch trái chiều.\n\n🔸Có hiệu lực từ ngày 1/1/2025, Luật Đất đai sửa đổi 2024 được kỳ vọng sẽ góp phần tháo gỡ những vướng mắc, khó khăn, bất cập… liên quan đến chính sách đất đai hiện nay.\n\n🔸 Nhận định thị trường và gợi ý danh mục của VPS.\n\nNhà đầu tư tham khảo toàn bộ nội dung Bản tin sáng tại đây: http://www.vps.com.vn/Sites/QuoteVN/SiteRoot/ntnldt/Morning2501.png\n\n👉 Đăng ký tham gia ngay chuỗi chia sẻ kiến thức \"Mở lối hành trình đầu tư\" tại đây: https://shorturl.at/eHLW2",
-        "listacc": "",
-        "ispush": 1,
-        "csvKey": "",
-        "code": "10080001",
-        "image": "https://appnotification.vps.com.vn/assets/images/imgUploader_1706147804648_MorningOut.jpg",
-        "imagedt": "https://appnotification.vps.com.vn/assets/images/imgUploader_1706147804664_MorningIn.jpg",
-        "status": 1,
-        "datetimecreate": "8:56 | 25/01/2024",
-        "datetimelastupd": "8:56 | 25/01/2024",
-        "group_type": "2",
-        "key": "800_minhna_20240125_85644785",
-        "createDate": "25/01/2024"
-    },
-    {
-        "type": 800,
-        "level": 1,
-        "devicetype": "all",
-        "title": "Nhận định HĐTL VN30 ngày 25/01/2024",
-        "body": "Nhà đầu tư quan tâm vị thế Long nên lưu ý stoploss tại vùng 1,176 – 1,177. Nhà đầu tư quan tâm vị thế Short nên lưu ý stoploss tại vùng 1,191 – 1,192.",
-        "body_detail": "· Trong phiên giao dịch ngày 24/01, HĐTL VN30 mở cửa giảm điểm nhẹ đầu phiên sau đó nhanh chóng bật tăng trở lại trên mức tham chiếu. Chỉ số sau đó biến động sideway trong biên độ rộng 1,180 – 1,190 điểm, và kết phiên trong sắc đỏ với ưu thế thuộc về phe Short. HĐTL VN30 đóng cửa tại mức 1,180.7 điểm, giảm 3.3 điểm so với tham chiếu, tương ứng với mức giảm 0.28%.\n\n· Basis dương +1.25 điểm vào thời điểm cuối phiên.\n(Basis = Giá hợp đồng tương lai – chỉ số VN30 cơ sở)\n\n· Khối lượng giao dịch của HĐTL F1M tăng 12.39% với 201,972 hợp đồng được khớp lệnh trong phiên.\n· Số lượng hợp đồng mở (OI) giảm 4.87% với 53,824 hợp đồng.\n· Các mã cổ phiếu đóng góp chính vào biến động của chỉ số VN30 bao gồm: MWG (-1.08 điểm), MSN (-0.83 điểm), ACB (-0.83 điểm), FPT (-0.65 điểm), STB (+0.48 điểm),…\n\nĐánh giá kỹ thuật:\nTrên biểu đồ khung H1, HĐTL VN30 đang trong nhịp điều chỉnh giảm ngắn hạn, sau khi giá phá vỡ khu vực hỗ trợ tại đường trendline tăng trước đó.\n\nNhà đầu tư quan tâm vị thế Long nên lưu ý stoploss tại vùng 1,176 – 1,177. Nhà đầu tư quan tâm vị thế Short nên lưu ý stoploss tại vùng 1,191 – 1,192.\n\n👉 Đăng ký tham gia ngay chuỗi chia sẻ kiến thức \"Mở lối hành trình đầu tư\" tại đây: https://shorturl.at/eHLW2",
-        "listacc": "",
-        "ispush": 0,
-        "csvKey": "",
-        "code": "10080001",
-        "image": "https://appnotification.vps.com.vn/assets/images/imgUploader_1706146633300_ImageOutchung.png",
-        "imagedt": "https://appnotification.vps.com.vn/assets/images/imgUploader_1706146633327_ps.jpg",
-        "status": 1,
-        "datetimecreate": "8:37 | 25/01/2024",
-        "datetimelastupd": "8:37 | 25/01/2024",
-        "group_type": "2",
-        "key": "800_minhna_20240125_83713420",
-        "createDate": "25/01/2024"
-    },
-    {
-        "type": 600,
-        "level": 1,
-        "devicetype": "so",
-        "title": "Khuyến nghị đầu tư",
-        "body": "Tổng hợp chỉ số chứng khoán và giá cả hàng hóa quốc tế đầu ngày (25/01/2024)",
-        "body_detail": "🔸 Tổng hợp chỉ số chứng khoán đầu ngày (25/01/2024)\n\n• Dow Jones (Mỹ): 37.806,39 điểm; -99,06 điểm; -0,26%\n\n• S&P 500 (Mỹ): 4.868,55 điểm; +3,95 điểm; +0,08%\n\n• Nasdaq Composite (Mỹ): 15.481,92 điểm; +55,98 điểm; +0,36%\n\n• Nikkei 225 (Nhật): 36.226,48 điểm; -291,09 điểm; -0,80%\n\n• Shanghai Composite (Trung Quốc): 2.820,77 điểm; +49,80 điểm; +1,80%\n\n🔸 Tổng hợp giá cả hàng hóa đầu ngày (25/01/2024)\n\n• Dầu thô WTI: 75,09 USD/thùng; +0,72 USD; +0,97%\n\n• Dầu thô Brent: 80,04 USD/thùng; +0,49 USD; +0,62%\n\n• Khí thiên nhiên: 2,64 USD/MMBtu; +0,19 USD; +7,8%\n\n• Vàng: 2012,59 USD/oz; -16,1 USD; -0,79%\n\n• Đồng: 3,88 USD/lb; +0,09 USD;+2,43%\n\n🔸 Tổng hợp chỉ số trong nước (25/01/2024)\n\n• Vàng SJC: Mua vào: 74.200.000 VND/lượng; Bán ra: 76.700.000 VND/lượng\n\n• USD: Mua vào: 24.461 VND; Bán ra: 24.683 VND\n\n• Lãi suất tiết kiệm 1 năm Vietcombank: 4,7%/năm",
-        "listacc": "",
-        "ispush": 0,
-        "csvKey": "",
-        "code": "10060001",
-        "image": "https://appnotification.vps.com.vn/assets/images/imgUploader_1706146490241_ImageOutchung.png",
-        "imagedt": "https://appnotification.vps.com.vn/assets/images/imgUploader_1706146490251_DetailImagechung.jpg",
-        "status": 1,
-        "datetimecreate": "8:34 | 25/01/2024",
-        "datetimelastupd": "8:34 | 25/01/2024",
-        "group_type": "2",
-        "key": "600_minhna_20240125_83450412",
-        "createDate": "25/01/2024"
-    },
-    {
-        "title": "Khuyến nghị đầu tư",
-        "body": "Đến hết phiên giao dịch buổi sáng, HNX đang có 56 mã tăng, 69 mã tham chiếu và 69 mã giảm.\n\nUPCOM đang có 120 mã tăng, 83 mã tham chiếu và 72 mã giảm.\n\nVNINDEX đang có 168 mã tăng, 97 mã tham chiếu và 262 mã giảm.\n\nVN30 đang có 10 mã tăng, 6 mã tham chiếu và 14 mã giảm.\n\n",
-        "body_detail": "Đến hết phiên giao dịch buổi sáng, HNX đang có 56 mã tăng, 69 mã tham chiếu và 69 mã giảm.\n\nUPCOM đang có 120 mã tăng, 83 mã tham chiếu và 72 mã giảm.\n\nVNINDEX đang có 168 mã tăng, 97 mã tham chiếu và 262 mã giảm.\n\nVN30 đang có 10 mã tăng, 6 mã tham chiếu và 14 mã giảm.\n\n\n\nTham khảo: https://banggia.vps.com.vn/",
-        "link": "https://banggia.vps.com.vn/",
-        "listacc": "",
-        "type": "600",
-        "group_type": "2",
-        "code": "10060001",
-        "devicetype": "all",
-        "status": 1,
-        "level": "1",
-        "datetimecreate": "11:35 | 24/01/2024",
-        "datetimelastupd": "11:35 | 24/01/2024",
-        "image": "https://appnotification.vps.com.vn/assets/images/khuyen_nghi_dau_tu.jpg",
-        "imagedt": "https://appnotification.vps.com.vn/assets/images/detail/4.jpg",
-        "key": "2024012411marketsessionview",
-        "createDate": "24/01/2024"
-    },
-    {
-        "type": 800,
-        "level": 1,
-        "devicetype": "all",
-        "title": "Bản tin sáng 24/01/2024",
-        "body": "TTCK phân hóa.",
-        "body_detail": "🔸 TTCK phân hóa.\n\n🔸 Mục tiêu đến năm 2030, Việt Nam là nước đang phát triển có công nghiệp hiện đại, thu nhập trung bình cao và năm 2045 trở thành nước phát triển, thu nhập cao.\n\n🔸 Nhận định thị trường và gợi ý danh mục của VPS.\n\nNhà đầu tư tham khảo toàn bộ nội dung Bản tin sáng tại đây: http://www.vps.com.vn/Sites/QuoteVN/SiteRoot/ntnldt/Morning2401.png\n\n👉 Đăng ký tham gia ngay chuỗi chia sẻ kiến thức \"Mở lối hành trình đầu tư\" tại đây: https://shorturl.at/eHLW2",
-        "listacc": "",
-        "ispush": 1,
-        "csvKey": "",
-        "code": "10080001",
-        "image": "https://appnotification.vps.com.vn/assets/images/imgUploader_1706061317805_MorningOut.jpg",
-        "imagedt": "https://appnotification.vps.com.vn/assets/images/imgUploader_1706061317820_MorningIn.jpg",
-        "status": 1,
-        "datetimecreate": "8:55 | 24/01/2024",
-        "datetimelastupd": "8:55 | 24/01/2024",
-        "group_type": "2",
-        "key": "800_minhna_20240124_85517890",
-        "createDate": "24/01/2024"
-    },
-    {
-        "type": 800,
-        "level": 1,
-        "devicetype": "all",
-        "title": "Nhận định HĐTL VN30 ngày 24/01/2024",
-        "body": "Nhà đầu tư quan tâm vị thế Long nên lưu ý stoploss tại vùng 1,176 – 1,177. Nhà đầu tư quan tâm vị thế Short nên lưu ý stoploss tại vùng 1,196 – 1,197.",
-        "body_detail": "· Trong phiên giao dịch ngày 23/01, HĐTL VN30 mở cửa giảm điểm nhẹ đầu phiên, xu hướng giảm giá sau đó được duy trì trong hầu hết phiên giao dịch. HĐTL VN30 kết phiên tại mức 1,184 điểm, giảm 10.0 điểm so với tham chiếu, tương ứng với mức giảm 0.84%.\n\n· Basis dương +0.15 điểm vào thời điểm cuối phiên.\n(Basis = Giá hợp đồng tương lai – chỉ số VN30 cơ sở)\n\n· Khối lượng giao dịch của HĐTL F1M tăng 6.07% với 179,695 hợp đồng được khớp lệnh trong phiên.\n· Số lượng hợp đồng mở (OI) giảm 2.24% với 56,585 hợp đồng.\n· Các mã cổ phiếu đóng góp chính vào biến động của chỉ số VN30 bao gồm: TCB (+1.17 điểm), FPT (-0.87 điểm), ACB (-0.83 điểm), MWG (-0.82 điểm), VHM (-0.70 điểm),…\n\nĐánh giá kỹ thuật:\nTrên biểu đồ khung H1, HĐTL VN30 đang trong nhịp điều chỉnh giảm ngắn hạn, kiểm tra khu vực hỗ trợ tại trendline tăng giá trước đó.\n\nNhà đầu tư quan tâm vị thế Long nên lưu ý stoploss tại vùng 1,176 – 1,177. Nhà đầu tư quan tâm vị thế Short nên lưu ý stoploss tại vùng 1,196 – 1,197.\n\nGiao dịch chứng khoán phái sinh là hoạt động đầu tư sử dụng đòn bẩy cao, nhà đầu tư cần lưu ý quản lý vốn tốt để bảo vệ tài khoản của mình.\n\n👉 Đăng ký tham gia ngay chuỗi chia sẻ kiến thức \"Mở lối hành trình đầu tư\" tại đây: https://shorturl.at/eHLW2",
-        "listacc": "",
-        "ispush": 0,
-        "csvKey": "",
-        "code": "10080001",
-        "image": "https://appnotification.vps.com.vn/assets/images/imgUploader_1706060313323_ImageOutchung.png",
-        "imagedt": "https://appnotification.vps.com.vn/assets/images/imgUploader_1706060313370_pa.jpg",
-        "status": 1,
-        "datetimecreate": "8:38 | 24/01/2024",
-        "datetimelastupd": "8:38 | 24/01/2024",
-        "group_type": "2",
-        "key": "800_minhna_20240124_83833533",
-        "createDate": "24/01/2024"
-    },
-    {
-        "type": 600,
-        "level": 1,
-        "devicetype": "so",
-        "title": "Khuyến nghị đầu tư",
-        "body": "Tổng hợp chỉ số chứng khoán và giá cả hàng hóa quốc tế đầu ngày (24/01/2024)",
-        "body_detail": "🔸 Tổng hợp chỉ số chứng khoán đầu ngày (24/01/2024)\n\n• Dow Jones (Mỹ): 37.905,45 điểm; -96,36 điểm; -0,25%\n\n• S&P 500 (Mỹ): 4.864,60 điểm; +14,17 điểm; +0,29%\n\n• Nasdaq Composite (Mỹ): 15.425,94 điểm; +65,65 điểm; +0,43%\n\n• Nikkei 225 (Nhật): 36.517,57 điểm; -29,38 điểm; -0,08%\n\n• Shanghai Composite (Trung Quốc): 2.770,98 điểm; +14,64 điểm; +0,53%\n\n🔸 Tổng hợp giá cả hàng hóa đầu ngày (24/01/2024)\n\n• Dầu thô WTI: 74,37 USD/thùng; -0,39 USD; -0,52%\n\n• Dầu thô Brent: 79,55 USD/thùng; -0,51 USD; -0,64%\n\n• Khí thiên nhiên: 2,45 USD/MMBtu; +0,03 USD; +1,28%\n\n• Vàng: 2028,69 USD/oz; +7,7 USD; +0,38%\n\n• Đồng: 3,76 USD/lb; -0,02 USD; -0,61%\n\n🔸 Tổng hợp chỉ số trong nước (24/01/2024)\n\n• Vàng SJC: Mua vào: 74.000.000 VND/lượng; Bán ra: 76.500.000 VND/lượng\n\n• USD: Mua vào: 24.457 VND; Bán ra: 24.679 VND\n\n• Lãi suất tiết kiệm 1 năm Vietcombank: 4,7%/năm",
-        "listacc": "",
-        "ispush": 0,
-        "csvKey": "",
-        "code": "10060001",
-        "image": "https://appnotification.vps.com.vn/assets/images/imgUploader_1706060202847_ImageOutchung.png",
-        "imagedt": "https://appnotification.vps.com.vn/assets/images/imgUploader_1706060202865_DetailImagechung.jpg",
-        "status": 1,
-        "datetimecreate": "8:36 | 24/01/2024",
-        "datetimelastupd": "8:36 | 24/01/2024",
-        "group_type": "2",
-        "key": "600_minhna_20240124_8364330",
-        "createDate": "24/01/2024"
-    },
-    {
-        "title": "Khuyến nghị đầu tư",
-        "body": "Đến hết phiên giao dịch buổi sáng, HNX đang có 63 mã tăng, 71 mã tham chiếu và 65 mã giảm.\n\nUPCOM đang có 97 mã tăng, 76 mã tham chiếu và 101 mã giảm.\n\nVNINDEX đang có 146 mã tăng, 101 mã tham chiếu và 277 mã giảm.\n\nVN30 đang có 4 mã tăng, 3 mã tham chiếu và 23 mã giảm.\n\n",
-        "body_detail": "Đến hết phiên giao dịch buổi sáng, HNX đang có 63 mã tăng, 71 mã tham chiếu và 65 mã giảm.\n\nUPCOM đang có 97 mã tăng, 76 mã tham chiếu và 101 mã giảm.\n\nVNINDEX đang có 146 mã tăng, 101 mã tham chiếu và 277 mã giảm.\n\nVN30 đang có 4 mã tăng, 3 mã tham chiếu và 23 mã giảm.\n\n\n\nTham khảo: https://banggia.vps.com.vn/",
-        "link": "https://banggia.vps.com.vn/",
-        "listacc": "",
-        "type": "600",
-        "group_type": "2",
-        "code": "10060001",
-        "devicetype": "all",
-        "status": 1,
-        "level": "1",
-        "datetimecreate": "11:35 | 23/01/2024",
-        "datetimelastupd": "11:35 | 23/01/2024",
-        "image": "https://appnotification.vps.com.vn/assets/images/khuyen_nghi_dau_tu.jpg",
-        "imagedt": "https://appnotification.vps.com.vn/assets/images/detail/4.jpg",
-        "key": "2024012311marketsessionview",
-        "createDate": "23/01/2024"
-    },
-    {
-        "type": 800,
-        "level": 1,
-        "devicetype": "all",
-        "title": "Bản tin sáng 23/01/2024",
-        "body": "TTCK Mỹ tăng trở lại.",
-        "body_detail": "🔸 TTCK Mỹ tăng trở lại.\n\n🔸 Cước phí vận tải biển đã tăng cao gấp đôi, gấp ba do tình trạng mất an ninh tại khu vực Biển Đỏ.\n\n🔸 Nhận định thị trường và gợi ý danh mục của VPS.\n\nNhà đầu tư tham khảo toàn bộ nội dung Bản tin sáng tại đây: http://www.vps.com.vn/Sites/QuoteVN/SiteRoot/ntnldt/Morning2301.png",
-        "listacc": "",
-        "ispush": 1,
-        "csvKey": "",
-        "code": "10080001",
-        "image": "https://appnotification.vps.com.vn/assets/images/imgUploader_1705975125412_MorningOut.jpg",
-        "imagedt": "https://appnotification.vps.com.vn/assets/images/imgUploader_1705975125483_MorningIn.jpg",
-        "status": 1,
-        "datetimecreate": "8:58 | 23/01/2024",
-        "datetimelastupd": "8:58 | 23/01/2024",
-        "group_type": "2",
-        "key": "800_minhna_20240123_85845596",
-        "createDate": "23/01/2024"
-    },
-    {
-        "type": 800,
-        "level": 1,
-        "devicetype": "all",
-        "title": "Nhận định HĐTL VN30 ngày 23/01/2024",
-        "body": "Nhà đầu tư quan tâm vị thế Long nên lưu ý stoploss tại vùng 1,180 – 1,181. Vị thế Short chưa được ưu tiên trong ngắn hạn.",
-        "body_detail": "· Trong phiên giao dịch ngày 22/01, HĐTL VN30 mở cửa tăng điểm mạnh đầu phiên, sau đó nhanh chóng điều chỉnh giảm trở lại và duy trì quanh mức tham chiếu trong hầu hết phiên sáng và nửa đầu phiên chiều. Phe Long chiếm lại ưu thế vào cuối phiên kéo chỉ số đóng cửa trong sắc xanh HĐTL VN30 kết phiên tại mức 1,194 điểm, tăng 4.0 điểm so với tham chiếu, tương ứng với mức tăng 0.34%.\n\n· Basis dương +4.44 điểm vào thời điểm cuối phiên.\n(Basis = Giá hợp đồng tương lai – chỉ số VN30 cơ sở)\n\n· Khối lượng giao dịch của HĐTL F1M tăng 9.96% với 169,406 hợp đồng được khớp lệnh trong phiên.\n· Số lượng hợp đồng mở (OI) tăng 31.8% với 57,884 hợp đồng.\n· Các mã cổ phiếu đóng góp chính vào biến động của chỉ số VN30 bao gồm: HPG (+1.64 điểm), ACB (+1.18 điểm), VPB (+0.47 điểm), HDB (+0.44 điểm), VCB (-0.31 điểm),…\n\nĐánh giá kỹ thuật:\nTrên biểu đồ khung H1, HĐTL VN30 tiếp tục duy trì xu hướng tăng với các mức đỉnh/đáy cao dần, các nhịp điều chỉnh giảm ngắn hạn có thể là cơ hội cho chiến lược “Buy on dip”.\n\nNhà đầu tư quan tâm vị thế Long nên lưu ý stoploss tại vùng 1,180 – 1,181. Vị thế Short chưa được ưu tiên trong ngắn hạn.\n\nGiao dịch chứng khoán phái sinh là hoạt động đầu tư sử dụng đòn bẩy cao, nhà đầu tư cần lưu ý quản lý vốn tốt để bảo vệ tài khoản của mình.\n\n👉 Đăng ký tham gia ngay chuỗi chia sẻ kiến thức \"Mở lối hành trình đầu tư\" tại đây: https://shorturl.at/eHLW2",
-        "listacc": "",
-        "ispush": 1,
-        "csvKey": "",
-        "code": "10080001",
-        "image": "https://appnotification.vps.com.vn/assets/images/imgUploader_1705973603808_ImageOutchung.png",
-        "imagedt": "https://appnotification.vps.com.vn/assets/images/imgUploader_1705973603839_ps.jpg",
-        "status": 1,
-        "datetimecreate": "8:33 | 23/01/2024",
-        "datetimelastupd": "8:33 | 23/01/2024",
-        "group_type": "2",
-        "key": "800_minhna_20240123_83323921",
-        "createDate": "23/01/2024"
-    },
-    {
-        "type": 800,
-        "level": 1,
-        "devicetype": "all",
-        "title": "Tin tổng hợp doanh nghiệp 23/01/2024",
-        "body": "HPG, TCM, IMP, LHG, BSI, D2D, DRI, HCM, HOM, SRC",
-        "body_detail": "HPG, TCM, IMP, LHG, BSI, D2D, DRI, HCM, HOM, SRC\n\nHPG: Lợi nhuận sau thuế gần 3.000 tỷ đồng. Quý IV/2023, CTCP tập đoàn Hòa Phát (HOSE: HPG) ghi nhận doanh thu 34.925 tỷ đồng, tăng 33% so với cùng kỳ năm 2023. LNST ở mức 2.969 tỷ đồng, tăng 249% so với cùng kỳ và tăng 48% so với quý trước. Lũy kế cả năm 2023, Hòa Phát đạt 120.355 tỷ đồng doanh thu, giảm 16% so với cùng kỳ năm trước. LNST là 6.800 tỷ đồng, tương ứng hoàn thành 85% kế hoạch năm.\n\nTCM: Lợi nhuận thấp nhất 7 năm. Theo BCTC hợp nhất Quý IV/2023, CTCP Dệt may - Đầu tư - Thương mại Thành Công (HOSE: TCM) lãi ròng gần 22 tỷ đồng, giảm 64% so với cùng kỳ. Lũy kế năm 2023, doanh thu thuần đạyt hơn 3,3 ngàn tỷ đồng và lãi ròng gần 132 tỷ đồng, giảm lần lượt 23% và 53% so với năm 2022. Đây là mức lợi nhuận thấp nhất trong 7 năm qua của doanh nghiệp, từ năm 2017.\n\nIMP: Lợi nhuận kỷ lục 2023. CTCP Dược phẩm Imexpharm (HOSE: IMP) kết thúc năm 2023 với doanh thu gần 2 ngàn tỷ đồng, tăng 21% so với năm trước; LNST gần 300 tỷ đồng, tăng 34%, cũng là mức lãi kỷ lục của doanh nghiệp kể từ khi lên sàn vào năm 2006. So với kế hoạch được ĐHĐCĐ 2023 thông qua, IMP vượt 14% kế hoạch doanh thu và 8% mục tiêu lãi trước thuế.\n\nLHG: Lợi nhuận Quý IV tăng 90%. Quý IV, CTCP Long Hậu (HOSE: LHG) ghi nhận doanh thu thuần 145 tỷ đồng, tăng 40% so với cùng kỳ năm trước, LNST theo đó tăng 90%, đạt 62 tỷ đồng. Lũy kế cả năm 2023, LHG đạt gần 167 tỷ đồng lãi sau thuế, vẫn còn kém 18% so với kết quả năm trước. Mặc dù vậy, so với kế hoạch năm, Long Hậu đã vượt 31% chỉ tiêu lợi nhuận.\n\nBSI: Lợi nhuận sau thuế Quý IV tăng gần 300%. BCTC Quý IV/2023 của CTCP Chứng khoán BIDV (HOSE: BSI) ghi nhận lãi sau thuế đạt 64 tỷ đồng. Tính lũy kế từ đầu năm 2023, doanh thu hoạt động của BSI là 1.259 tỷ đồng (tăng 16%). Lãi trước thuế đạt 509 tỷ đồng, gấp 3,4 lần năm trước và bằng 90% kế hoạch cả năm (565 tỷ đồng). Sau cùng, lãi sau thuế năm 2023 của công ty đạt 408 tỷ đồng, gấp 3,6 lần năm 2022 và cũng là mốc cao nhất trong vòng hơn 10 năm qua.\n\nD2D: Lợi nhuận ròng tăng 69%. Trong Quý IV, CTCP Phát triển Đô thị Công nghiệp số 2 (HOSE: D2D) ghi nhận doanh thu thuần gần 119 tỷ đồng, tăng 56% so với cùng kỳ, lợi nhuận ròng theo đó đạt 23 tỷ đồng, tăng 69% so với cùng kỳ. Năm 2023, D2D đạt lãi ròng hơn 25 tỷ đồng, tăng 48% so với năm trước. So với kế hoạch đề ra, D2D mới thực hiện được 79% chỉ tiêu tổng doanh thu và 62% chỉ tiêu lãi sau thuế năm.\n\nDRI: Vượt 31% kế hoạch lợi nhuận năm. Lãi ròng Quý IV/2023 của CTCP Đầu tư Cao su Đắk Lắk (UPCOM: DRI) giảm 36% so với cùng kỳ, do biên lãi gộp thu hẹp và bị truy thuế TNDN. Tuy nhiên, kết thúc năm 2023, DRI vẫn vượt 31% kế hoạch lợi nhuận đề ra khi đạt 72 tỷ đồng. \n\nHCM: Lợi nhuận giảm 20%. CTCP Chứng khoán TP.HCM (HOSE: HCM) công bố kết quả kinh doanh Quý IV /2023 và lũy kế năm 2023. Theo đó, lợi nhuận trước thuế Quý IV /2023 đạt 225 tỷ đồng, tăng 41% so với cùng kỳ năm 2022. Lũy kế cả năm 2023, HCM ghi nhận lợi nhuận trước thuế đạt 842 tỷ đồng, giảm hơn 20%, thực hiện 93% kế hoạch.\n\nHOM: Lần đầu báo lỗ sau 14 năm. Quý IV/2023, CTCP Xi măng VICEM Hoàng Mai (HNX: HOM) ghi nhận doanh thu thuần hơn 469 tỷ đồng, giảm 12% so với cùng kỳ. Lỗ ròng hơn 5 tỷ đồng, trong khi cùng kỳ lãi hơn 6 tỷ đồng. Đây cũng là quý thứ 2 liên tiếp, HOM báo lỗ (Quý III/2023 lỗ hơn 26 tỷ đồng). \n\nSRC: Thực hiện 37% kế hoạch năm. CTCP Cao su Sao Vàng (HOSE: SRC) công bố BCTC Quý IV /2023, chuyển sang lãi ròng hơn 13 tỷ đồng, từ mức lỗ hơn 9 tỷ đồng cùng kỳ. Kết năm 2023, SRC lãi ròng hơn 29 tỷ đồng, tăng 6%, thực hiện hơn 37% kế hoạch năm.",
-        "listacc": "",
-        "ispush": 0,
-        "csvKey": "",
-        "code": "10080001",
-        "image": "https://appnotification.vps.com.vn/assets/images/imgUploader_1705973534460_ImageOutchung.png",
-        "imagedt": "https://appnotification.vps.com.vn/assets/images/imgUploader_1705973534481_DetailImagechung.jpg",
-        "status": 1,
-        "datetimecreate": "8:32 | 23/01/2024",
-        "datetimelastupd": "8:32 | 23/01/2024",
-        "group_type": "2",
-        "key": "800_minhna_20240123_83214572",
-        "createDate": "23/01/2024"
-    },
-    {
-        "type": 600,
-        "level": 1,
-        "devicetype": "so",
-        "title": "Khuyến nghị đầu tư",
-        "body": "Tổng hợp chỉ số chứng khoán và giá cả hàng hóa quốc tế đầu ngày (23/01/2024)",
-        "body_detail": "🔸 Tổng hợp chỉ số chứng khoán đầu ngày (23/01/2024)\n\n• Dow Jones (Mỹ): 38.001,81 điểm; +138,01 điểm; +0,36%\n\n• S&P 500 (Mỹ): 4.850,43 điểm; +10,62 điểm; +0,22%\n\n• Nasdaq Composite (Mỹ): 15.360,29 điểm; +49,32 điểm; +0,32%\n\n• Nikkei 225 (Nhật): 36.546,95 điểm; +583,68 điểm; +1,62%\n\n• Shanghai Composite (Trung Quốc): 2.756,34 điểm; -75,94 điểm; -2,68%\n\n🔸 Tổng hợp giá cả hàng hóa đầu ngày (23/01/2024)\n\n• Dầu thô WTI: 74,76 USD/thùng; +1,5 USD; +2,06%\n\n• Dầu thô Brent: 80,06 USD/thùng; +1,5 USD; +1,91%\n\n• Khí thiên nhiên: 2,41 USD/MMBtu; -0,1 USD; -3,97%\n\n• Vàng: 2020,99 USD/oz; -8,1 USD; -0,4%\n\n• Đồng: 3,75 USD/lb; -0,03 USD; -0,95%\n\n🔸 Tổng hợp chỉ số trong nước (23/01/2024)\n\n• Vàng SJC: Mua vào: 73.500.000 VND/lượng; Bán ra: 76.000.000 VND/lượng\n\n• USD: Mua vào: 24.428 VND; Bán ra: 24.648 VND\n\n• Lãi suất tiết kiệm 1 năm Vietcombank: 4,7%/năm",
-        "listacc": "",
-        "ispush": 0,
-        "csvKey": "",
-        "code": "10060001",
-        "image": "https://appnotification.vps.com.vn/assets/images/imgUploader_1705973450938_ImageOutchung.png",
-        "imagedt": "https://appnotification.vps.com.vn/assets/images/imgUploader_1705973450975_DetailImagechung.jpg",
-        "status": 1,
-        "datetimecreate": "8:30 | 23/01/2024",
-        "datetimelastupd": "8:30 | 23/01/2024",
-        "group_type": "2",
-        "key": "600_minhna_20240123_8305184",
-        "createDate": "23/01/2024"
-    },
-    {
-        "title": "Khuyến nghị đầu tư",
-        "body": "Đến hết phiên giao dịch buổi sáng, HNX đang có 56 mã tăng, 55 mã tham chiếu và 94 mã giảm.\n\nUPCOM đang có 97 mã tăng, 100 mã tham chiếu và 100 mã giảm.\n\nVNINDEX đang có 167 mã tăng, 100 mã tham chiếu và 281 mã giảm.\n\nVN30 đang có 12 mã tăng, 1 mã tham chiếu và 17 mã giảm.\n\n",
-        "body_detail": "Đến hết phiên giao dịch buổi sáng, HNX đang có 56 mã tăng, 55 mã tham chiếu và 94 mã giảm.\n\nUPCOM đang có 97 mã tăng, 100 mã tham chiếu và 100 mã giảm.\n\nVNINDEX đang có 167 mã tăng, 100 mã tham chiếu và 281 mã giảm.\n\nVN30 đang có 12 mã tăng, 1 mã tham chiếu và 17 mã giảm.\n\n\n\nTham khảo: https://banggia.vps.com.vn/",
-        "link": "https://banggia.vps.com.vn/",
-        "listacc": "",
-        "type": "600",
-        "group_type": "2",
-        "code": "10060001",
-        "devicetype": "all",
-        "status": 1,
-        "level": "1",
-        "datetimecreate": "11:35 | 22/01/2024",
-        "datetimelastupd": "11:35 | 22/01/2024",
-        "image": "https://appnotification.vps.com.vn/assets/images/khuyen_nghi_dau_tu.jpg",
-        "imagedt": "https://appnotification.vps.com.vn/assets/images/detail/4.jpg",
-        "key": "2024012211marketsessionview",
-        "createDate": "22/01/2024"
-    },
-    {
-        "body": "Tỷ lệ tối đa cấp tín dụng/vốn tự có với một khách hàng tại ngân hàng sẽ giảm dần từ 15% về 10% trong 5 năm (đến 2029).",
-        "body_detail": "🔸 TTCK Mỹ tăng trưởng mạnh trở lại.\n\n🔸 Tỷ lệ tối đa cấp tín dụng/vốn tự có với một khách hàng tại ngân hàng sẽ giảm dần từ 15% về 10% trong 5 năm (đến 2029).\n\n🔸 Nhận định thị trường và gợi ý danh mục của VPS.\n\nNhà đầu tư tham khảo toàn bộ nội dung Bản tin sáng tại đây: http://www.vps.com.vn/Sites/QuoteVN/SiteRoot/ntnldt/Morning2201.png\n\n👉 Đăng ký tham gia ngay chuỗi chia sẻ kiến thức \"Mở lối hành trình đầu tư\" tại đây: https://shorturl.at/eHLW2",
-        "code": "10080001",
-        "devicetype": "all",
-        "group_type": "2",
-        "image": "https://appnotification.vps.com.vn/assets/images/imgUploader_1705887429820_MorningOut.jpg",
-        "imagedt": "https://appnotification.vps.com.vn/assets/images/imgUploader_1705887429898_MorningIn.jpg",
-        "ispush": 1,
-        "level": 1,
-        "listacc": "",
-        "status": 1,
-        "title": "Bản tin sáng 22/01/2024",
-        "type": 800,
-        "datetimecreate": "8:37 | 22/01/2024",
-        "datetimelastupd": "08:52 | 22/01/2024",
-        "key": "800_minhna_20240122_8371036",
-        "csvKey": "",
-        "flag_video_background_popup": false,
-        "createDate": "22/01/2024"
-    },
-    {
-        "body": "Nhà đầu tư quan tâm vị thế Long nên lưu ý stoploss tại vùng 1,163 – 1,164. Vị thế Short chưa được ưu tiên trong ngắn hạn.",
-        "body_detail": "· Trong phiên giao dịch ngày 19/01, HĐTL VN30 mở cửa tăng điểm mạnh đầu phiên, xu hướng tích cực sau đó được duy trì trong hầu hết phiên giao dịch, đan xen với một số nhịp điều chỉnh ngắn vào thời điểm cuối phiên sáng và đầu phiên chiều. HĐTL VN30 đóng cửa tại mức 1,190 điểm, tăng 13.5 điểm so với tham chiếu, tương ứng với mức tăng 1.15%.\n\n· Basis dương +4.77 điểm vào thời điểm cuối phiên.\n(Basis = Giá hợp đồng tương lai – chỉ số VN30 cơ sở)\n\n· Khối lượng giao dịch của HĐTL F1M tăng 9.97% với 188,161 hợp đồng được khớp lệnh trong phiên.\n· Số lượng hợp đồng mở (OI) giảm 24.7% với 43,906 hợp đồng.\n· Các mã cổ phiếu đóng góp chính vào biến động của chỉ số VN30 bao gồm: TCB (+1.28 điểm), ACB (+1.17 điểm), MBB (+1.02 điểm), STB (+0.96 điểm), VPB (+0.95 điểm),…\n\nĐánh giá kỹ thuật:\nTrên biểu đồ khung H1, HĐTL VN30 tiếp tục duy trì xu hướng tăng với các mức đỉnh/đáy cao dần, các nhịp điều chỉnh giảm ngắn hạn có thể là cơ hội cho chiến lược “Buy on dip”.\n\nNhà đầu tư quan tâm vị thế Long nên lưu ý stoploss tại vùng 1,163 – 1,164. Vị thế Short chưa được ưu tiên trong ngắn hạn.\n\nGiao dịch chứng khoán phái sinh là hoạt động đầu tư sử dụng đòn bẩy cao, nhà đầu tư cần lưu ý quản lý vốn tốt để bảo vệ tài khoản của mình.\n\n👉 Đăng ký tham gia ngay chuỗi chia sẻ kiến thức \"Mở lối hành trình đầu tư\" tại đây: https://shorturl.at/eHLW2",
-        "code": "10080001",
-        "devicetype": "all",
-        "group_type": "2",
-        "image": "https://appnotification.vps.com.vn/assets/images/imgUploader_1705887338974_ImageOutchung.png",
-        "imagedt": "https://appnotification.vps.com.vn/assets/images/imgUploader_1705887339051_2201.jpg",
-        "ispush": 0,
-        "level": 1,
-        "listacc": "",
-        "status": 1,
-        "title": "Nhận định HĐTL VN30 ngày 22/01/2024",
-        "type": 800,
-        "datetimecreate": "8:35 | 22/01/2024",
-        "datetimelastupd": "08:35 | 22/01/2024",
-        "key": "800_minhna_20240122_83539274",
-        "csvKey": "",
-        "flag_video_background_popup": false,
-        "createDate": "22/01/2024"
+      }
     }
-]
+  };
 
+  return (
+    <JoditEditor
+      ref={editor}
+      value="<p>Start typing...</p>"
+      config={config}
+    />
+  );
+};
+
+export default MyEditor;
