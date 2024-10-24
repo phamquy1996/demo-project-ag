@@ -13,3 +13,4 @@ prepareData: function (data) {
         // Xử lý lỗi
         alert('Upload hình ảnh thất bại');
       }
+filesVariableName: 'buffer', 
