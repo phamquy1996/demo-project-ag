@@ -1,36 +1,84 @@
-const config = {
+const uploadFile = async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await axios.post('https://your-server.com/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      // Giả sử server trả về URL của hình ảnh
+      return response.data.url;
+    } catch (error) {
+      console.error('Upload failed:', error);
+      throw error;
+    }
+  };
+
+  // Cấu hình Jodit Editor
+  const config = {
+    readonly: false,
     uploader: {
-      insertImageAsBase64URI: false, // Tắt việc insert hình ảnh dưới dạng base64
+      insertImageAsBase64URI: false,
+      async uploadFile(file) {
+        try {
+          const url = await uploadFile(file);
+          return url;
+        } catch (error) {
+          alert('Upload ảnh thất bại!');
+          return '';
+        }
+      },
     },
     events: {
-      afterPaste: (event, editorInstance) => {
-        const clipboardData = (event.clipboardData || event.originalEvent.clipboardData);
-        const items = clipboardData.items;
+      /**
+       * Xử lý sau khi dán nội dung vào editor
+       * Sự kiện này sẽ kiểm tra nếu có hình ảnh được dán và chưa được upload,
+       * sẽ thực hiện upload hình ảnh đó.
+       */
+      afterPaste: async function (event) {
+        const editorInstance = this;
+        const images = editorInstance.selection.elements.querySelectorAll('img');
 
-        for (let item of items) {
-          if (item.type.indexOf('image') !== -1) {
-            const file = item.getAsFile();
-            const formData = new FormData();
-            formData.append('file', file);
+        for (let img of images) {
+          const src = img.getAttribute('src');
+          // Kiểm tra nếu src là một data URL (ảnh được dán từ clipboard)
+          if (src.startsWith('data:')) {
+            // Chuyển data URL thành Blob
+            const blob = dataURLtoBlob(src);
+            // Tạo một file mới từ blob
+            const file = new File([blob], 'pasted-image.png', { type: blob.type });
 
-            // Sử dụng axios để upload file lên server
-            axios.post('/upload-image', formData, {
-              headers: {
-                'Content-Type': 'multipart/form-data'
+            try {
+              const url = await uploadFile(file);
+              if (url) {
+                img.setAttribute('src', url);
               }
-            })
-            .then(response => {
-              // Lấy URL của hình ảnh từ response sau khi upload thành công
-              const imageUrl = response.data.fileUrl; // Cấu trúc này sẽ thay đổi theo API của bạn
-
-              // Chèn hình ảnh vào Jodit Editor
-              editorInstance.s.insertImage(imageUrl);
-            })
-            .catch(error => {
-              console.error("Upload hình ảnh thất bại: ", error);
-            });
+            } catch (error) {
+              console.error('Upload pasted image failed:', error);
+              // Xóa ảnh nếu upload thất bại
+              img.parentNode.removeChild(img);
+            }
           }
         }
-      }
+      },
+    },
+    // Cho phép kéo thả ảnh vào editor
+    dragAndDrop: true,
+  };
+
+  // Hàm chuyển dataURL thành Blob
+  const dataURLtoBlob = (dataurl) => {
+    const arr = dataurl.split(',');
+    const mime = arr[0].match(/:(.*?);/)[1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
     }
+
+    return new Blob([u8arr], { type: mime });
   };
