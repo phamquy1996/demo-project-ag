@@ -1,57 +1,36 @@
-import React, { useRef } from 'react';
-import JoditEditor from "jodit-react";
-import axios from 'axios';
-
-const MyEditor = () => {
-  const editor = useRef(null);
-  
-  const config = {
+const config = {
     uploader: {
-      insertImageAsBase64URI: false, // Disable base64 image to handle custom uploads
-      url: '/upload-image', // Set this to your server's image upload URL
-      format: 'json',
-      method: 'POST',
-      filesVariableName: function () {
-        return 'files';
-      },
-      process: function (resp) {
-        // Assuming your response contains the uploaded image URL
-        return {
-          files: resp.data.fileUrl, // Adjust this according to your API response format
-        };
-      },
+      insertImageAsBase64URI: false, // Tắt việc insert hình ảnh dưới dạng base64
     },
     events: {
-      afterPaste: function (e, editor) {
-        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+      afterPaste: (event, editorInstance) => {
+        const clipboardData = (event.clipboardData || event.originalEvent.clipboardData);
+        const items = clipboardData.items;
+
         for (let item of items) {
-          if (item.type.indexOf("image") === 0) {
+          if (item.type.indexOf('image') !== -1) {
             const file = item.getAsFile();
             const formData = new FormData();
-            formData.append('files', file);
+            formData.append('file', file);
 
-            // Upload the image using axios or your preferred HTTP client
-            axios.post('/upload-image', formData)
-              .then(response => {
-                const imageUrl = response.data.fileUrl; // Adjust based on response
-                editor.s.insertImage(imageUrl); // Insert uploaded image URL
-              })
-              .catch(error => {
-                console.error('Image upload failed:', error);
-              });
+            // Sử dụng axios để upload file lên server
+            axios.post('/upload-image', formData, {
+              headers: {
+                'Content-Type': 'multipart/form-data'
+              }
+            })
+            .then(response => {
+              // Lấy URL của hình ảnh từ response sau khi upload thành công
+              const imageUrl = response.data.fileUrl; // Cấu trúc này sẽ thay đổi theo API của bạn
+
+              // Chèn hình ảnh vào Jodit Editor
+              editorInstance.s.insertImage(imageUrl);
+            })
+            .catch(error => {
+              console.error("Upload hình ảnh thất bại: ", error);
+            });
           }
         }
       }
     }
   };
-
-  return (
-    <JoditEditor
-      ref={editor}
-      value="<p>Start typing...</p>"
-      config={config}
-    />
-  );
-};
-
-export default MyEditor;
