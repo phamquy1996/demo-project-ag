@@ -1,84 +1,15 @@
-const uploadFile = async (file) => {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-      const response = await axios.post('https://your-server.com/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-      // Giả sử server trả về URL của hình ảnh
-      return response.data.url;
-    } catch (error) {
-      console.error('Upload failed:', error);
-      throw error;
-    }
-  };
-
-  // Cấu hình Jodit Editor
-  const config = {
-    readonly: false,
-    uploader: {
-      insertImageAsBase64URI: false,
-      async uploadFile(file) {
-        try {
-          const url = await uploadFile(file);
-          return url;
-        } catch (error) {
-          alert('Upload ảnh thất bại!');
-          return '';
-        }
+prepareData: function (data) {
+        // Thêm các trường dữ liệu bổ sung vào FormData
+        data.append('userId', '12345'); // Ví dụ: thêm userId
+        data.append('description', 'Hình ảnh tải lên từ Jodit Editor'); // Thêm mô tả
+        // Bạn có thể thêm nhiều trường hơn nếu cần
+        return data;
       },
-    },
-    events: {
-      /**
-       * Xử lý sau khi dán nội dung vào editor
-       * Sự kiện này sẽ kiểm tra nếu có hình ảnh được dán và chưa được upload,
-       * sẽ thực hiện upload hình ảnh đó.
-       */
-      afterPaste: async function (event) {
-        const editorInstance = this;
-        const images = editorInstance.selection.elements.querySelectorAll('img');
-
-        for (let img of images) {
-          const src = img.getAttribute('src');
-          // Kiểm tra nếu src là một data URL (ảnh được dán từ clipboard)
-          if (src.startsWith('data:')) {
-            // Chuyển data URL thành Blob
-            const blob = dataURLtoBlob(src);
-            // Tạo một file mới từ blob
-            const file = new File([blob], 'pasted-image.png', { type: blob.type });
-
-            try {
-              const url = await uploadFile(file);
-              if (url) {
-                img.setAttribute('src', url);
-              }
-            } catch (error) {
-              console.error('Upload pasted image failed:', error);
-              // Xóa ảnh nếu upload thất bại
-              img.parentNode.removeChild(img);
-            }
-          }
-        }
+      defaultHandlerSuccess: function (response) {
+        // Xử lý phản hồi thành công
+        return response.url; // Trả về URL của hình ảnh đã tải lên
       },
-    },
-    // Cho phép kéo thả ảnh vào editor
-    dragAndDrop: true,
-  };
-
-  // Hàm chuyển dataURL thành Blob
-  const dataURLtoBlob = (dataurl) => {
-    const arr = dataurl.split(',');
-    const mime = arr[0].match(/:(.*?);/)[1];
-    const bstr = atob(arr[1]);
-    let n = bstr.length;
-    const u8arr = new Uint8Array(n);
-
-    while (n--) {
-      u8arr[n] = bstr.charCodeAt(n);
-    }
-
-    return new Blob([u8arr], { type: mime });
-  };
+      defaultHandlerError: function (response) {
+        // Xử lý lỗi
+        alert('Upload hình ảnh thất bại');
+      }
