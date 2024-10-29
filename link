@@ -44,3 +44,12 @@ const config = {
         beforePaste: handlePaste,
     },
 };
+events: {
+        paste: e => {
+            const newContent = e.target.innerHTML.replace(/(^|;)\s*font-[^;]+/g,""); // remove font-family...
+            e.value = newContent;
+            e.target.value = newContent;
+            e.target.innerHTML = newContent;
+            return e;
+        }
+    },
