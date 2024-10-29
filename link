@@ -60,3 +60,16 @@ minHeight: 400,
 	defaultActionOnPasteFromWord: 'insert_as_html',
 	askBeforePasteFromWord: false,
 	askBeforePasteHTML: false,
+
+events: {
+                  processPaste: function(event, html){
+                      jodit_editor.selection.insertHTML(html);
+                      jodit_editor.tempContent = jodit_editor.getEditorValue();
+                  },
+                  afterPaste: function(event){
+                      let el = $('<div></div>');
+                      el.html(jodit_editor.tempContent ? jodit_editor.tempContent : jodit_editor.getEditorValue());
+                      jodit_editor.setEditorValue(el.html());
+                      jodit_editor.tempContent = null;
+                  },
+              },
