@@ -73,3 +73,47 @@ events: {
                       jodit_editor.tempContent = null;
                   },
               },
+
+
+events: {
+    processPaste: function(event, html){
+        // Kiểm tra nếu nội dung dán chứa ảnh
+        const clipboardData = (event.originalEvent || event).clipboardData;
+        if (clipboardData && clipboardData.items) {
+            const items = clipboardData.items;
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    const blob = items[i].getAsFile();
+                    const formData = new FormData();
+                    formData.append('upload', blob);
+
+                    // Gửi ảnh lên server
+                    fetch('/upload_image', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.filelink) {
+                            // Chèn ảnh vào editor
+                            this.selection.insertImage(data.filelink);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error uploading image:', error);
+                    });
+                }
+            }
+        }
+
+        // Tiếp tục chèn HTML đã dán
+        this.selection.insertHTML(html);
+        this.tempContent = this.getEditorValue();
+    },
+    afterPaste: function(event){
+        let el = $('<div></div>');
+        el.html(this.tempContent ? this.tempContent : this.getEditorValue());
+        this.setEditorValue(el.html());
+        this.tempContent = null;
+    },
+},
