@@ -14,3 +14,33 @@ prepareData: function (data) {
         alert('Upload hình ảnh thất bại');
       }
 filesVariableName: 'buffer', 
+
+const handlePaste = (event: ClipboardEvent) => {
+    const clipboardData = event.clipboardData;
+    const items = clipboardData?.items;
+
+    if (items) {
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image') === 0) {
+                const file = items[i].getAsFile();
+                const reader = new FileReader();
+
+                reader.onload = (e) => {
+                    const base64Image = e.target?.result as string;
+                    setContent((prevContent) => prevContent + `<img src="${base64Image}" alt="Pasted Image"/>`);
+                };
+
+                if (file) {
+                    reader.readAsDataURL(file);
+                }
+            }
+        }
+    }
+};
+
+// Add the paste handler to the JoditEditor configuration
+const config = {
+    events: {
+        beforePaste: handlePaste,
+    },
+};
