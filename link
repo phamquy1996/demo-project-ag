@@ -53,3 +53,10 @@ events: {
             return e;
         }
     },
+
+minHeight: 400,
+	maxHeight: -1,
+	defaultActionOnPaste: 'insert_as_html',
+	defaultActionOnPasteFromWord: 'insert_as_html',
+	askBeforePasteFromWord: false,
+	askBeforePasteHTML: false,
