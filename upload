@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Upload Ảnh từ Word</title>
+</head>
+<body>
+    <div id="editor" contenteditable="true" style="width: 500px; height: 300px; border: 1px solid #ccc; padding: 10px;">
+        Dán nội dung từ Word vào đây...
+    </div>
+    <script src="upload.js"></script>
+</body>
+</html>
+document.addEventListener('DOMContentLoaded', function() {
+    const editor = document.getElementById('editor');
+
+    editor.addEventListener('paste', function(event) {
+        const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+        for (let index in items) {
+            const item = items[index];
+            if (item.kind === 'file') {
+                const blob = item.getAsFile();
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    // Hiển thị hình ảnh trong editor
+                    const img = document.createElement('img');
+                    img.src = event.target.result;
+                    editor.appendChild(img);
+                    
+                    // Tải hình ảnh lên máy chủ
+                    uploadImage(blob);
+                };
+                reader.readAsDataURL(blob);
+            }
+        }
+    });
+
+    function uploadImage(file) {
+        const formData = new FormData();
+        formData.append('image', file);
+
+        fetch('/upload', { // Thay '/upload' bằng URL xử lý upload trên máy chủ của bạn
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Upload thành công:', data);
+            // Bạn có thể xử lý URL trả về để lưu hoặc hiển thị
+        })
+        .catch(error => {
+            console.error('Lỗi khi upload:', error);
+        });
+    }
+});
