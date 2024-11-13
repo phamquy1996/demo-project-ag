@@ -117,3 +117,103 @@ events: {
         this.tempContent = null;
     },
 },
+
+
+import React, { useRef, useEffect } from 'react';
+import JoditEditor from 'jodit-react';
+import Jodit from 'jodit';
+import 'jodit/build/jodit.min.css';
+
+const JoditCustomEditor = () => {
+  const editor = useRef(null);
+
+  useEffect(() => {
+    // 1. Define the Dummy module
+    Jodit.modules.Dummy = function (editorInstance) {
+      this.insertDummyImage = function (w, h, textcolor, bgcolor) {
+        const src = `http://dummyimage.com/${w}x${h}/${textcolor || '000'}/${bgcolor || 'fff'}`;
+        const image = editorInstance.createInside.element('img');
+        image.setAttribute('src', src);
+        editorInstance.selection.insertNode(image);
+        editorInstance.setEditorValue(); // Synchronize value between textarea and editor
+      };
+    };
+
+    // 2. Register the Dummy plugin
+    Jodit.plugins.add('dummy', function (editorInstance) {
+      // Initialize the Dummy module
+      editorInstance.dummy = new Jodit.modules.Dummy(editorInstance);
+    });
+
+    // 3. Define the custom button in Jodit's controls
+    Jodit.defaultOptions.controls.dummy = {
+      // You can use an icon image by providing the URL
+      // iconURL: 'path/to/your/dummy-icon.png',
+
+      // Or use text instead of an icon
+      text: 'Dummy',
+
+      // Tooltip for the button
+      tooltip: 'Insert Dummy Image',
+
+      // Execution function when the button is clicked
+      exec: function (editorInstance) {
+        // Parameters for the dummy image
+        const width = 100;
+        const height = 100;
+        const textColor = 'f00'; // Red text
+        const bgColor = '000';    // Black background
+
+        // Insert the dummy image using the Dummy module
+        editorInstance.dummy.insertDummyImage(width, height, textColor, bgColor);
+      },
+    };
+  }, []);
+
+  // 4. Configure Jodit editor options
+  const config = {
+    readonly: false, // Set to true to make the editor read-only
+    toolbarSticky: false,
+    buttons: [
+      'bold',
+      'italic',
+      'underline',
+      'strikethrough',
+      '|', // Separator
+      'unorderedList',
+      'orderedList',
+      '|',
+      'link',
+      'image',
+      'video',
+      '|',
+      'undo',
+      'redo',
+      '|',
+      'dummy', // Your custom Dummy button
+    ],
+    // You can add more configurations here as needed
+  };
+
+  return (
+    <div>
+      <h2>Jodit Editor with Custom Dummy Button</h2>
+      <JoditEditor
+        ref={editor}
+        value={''} // Initial content of the editor
+        config={config}
+        tabIndex={1} // Tab index of the textarea
+        onBlur={(newContent) => {
+          // Handle onBlur event if needed
+          console.log('Editor content on blur:', newContent);
+        }}
+        onChange={(newContent) => {
+          // Handle onChange event if needed
+          console.log('Editor content changed:', newContent);
+        }}
+      />
+    </div>
+  );
+};
+
+export default JoditCustomEditor;
