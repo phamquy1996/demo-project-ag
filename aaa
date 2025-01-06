@@ -1,0 +1,193 @@
+// Phương thức bất đồng bộ để xử lý hàng đợi lệnh
+private async void ProcessOrdersQueue()
+{
+    // Tạm dừng luồng trong 500 mili-giây trước khi bắt đầu xử lý
+    Thread.Sleep(500);
+
+    // Vòng lặp chính, chạy liên tục khi m_processQueue là true
+    while (m_processQueue)
+    {
+        // Khởi tạo danh sách tạm để chứa các lệnh lấy ra từ hàng đợi
+        List<Order> orderItems = new List<Order>();
+
+        // Lấy các lệnh từ hàng đợi m_ordersQueue
+        lock (m_queueLock) 
+        {
+            // Khi hàng đợi còn lệnh thì dequeue (lấy ra) và đưa vào orderItems
+            while (m_ordersQueue.Count > 0)
+            {
+                orderItems.Add(m_ordersQueue.Dequeue());
+            }
+        }
+
+        // Tính thời gian chờ (sleepTime) tùy theo số lượng lệnh
+        int sleepTime = GetSleepTime(orderItems.Count);
+
+        // Nếu có lệnh trong orderItems
+        if (orderItems.Count > 0)
+        {
+            // Tạo dictionary (từ điển) để gom các lệnh lại theo PkOrderNo (khóa)
+            Dictionary<string, OrderItem> orderDict = new Dictionary<string, OrderItem>();
+
+            // Biến lưu giá trị nhỏ nhất của OrderId, mặc định là rất lớn (int.MaxValue)
+            int minOrderId = int.MaxValue;
+
+            // Duyệt qua các lệnh đang hiển thị trên ListView lvOrder
+            lock (m_lvOrderLock)
+            {
+                foreach (ListViewItem item in lvOrder.Items)
+                {
+                    // Nếu item.Tag chứa một đối tượng thuộc kiểu Order
+                    if (item.Tag is Order order)
+                    {
+                        try
+                        {
+                            // Lấy OrderNo (chuỗi) và chuyển về kiểu int
+                            int orderId = int.Parse(order.OrderNo);
+
+                            // Tạo một OrderItem để lưu thông tin lệnh và liên kết với ListViewItem
+                            OrderItem orderItem = new OrderItem
+                            {
+                                Item = item,
+                                Order = null,
+                                OrderNo = orderId,
+                                PkOrderNo = order.PkOrderNo
+                            };
+
+                            // Nếu trong từ điển chưa có key = PkOrderNo này thì thêm vào
+                            if (!orderDict.ContainsKey(orderItem.PkOrderNo))
+                            {
+                                orderDict.Add(orderItem.PkOrderNo, orderItem);
+                            }
+
+                            // Cập nhật minOrderId nếu orderId hiện tại nhỏ hơn minOrderId
+                            if (minOrderId > orderId)
+                            {
+                                minOrderId = orderId;
+                            }
+                        }
+                        catch
+                        {
+                            // Nếu xảy ra lỗi parse orderId, có thể ghi log hoặc xử lý phù hợp
+                        }
+                    }
+                }
+            }
+
+            // Lấy giá trị nhóm đã chọn
+            string group = GetSelectedGroup();
+            // Lấy bộ lọc tài khoản (nếu có)
+            string filterAccount = tbAccount.Text.Trim();
+            // Lấy bộ lọc mã chứng khoán (nếu có)
+            string filterSymbol = tbSymbol.Text.Trim().ToUpper();
+            // Lấy bộ lọc thị trường (nếu có)
+            string filterMktId = tbMktID.Text.Trim();
+            // Kiểm tra xem có đang ở trang đầu, không có TraderID và OrderNo để lọc hay không
+            bool filterPage = string.IsNullOrEmpty(tbTraderID.Text) && tbPage.Text == "1" && string.IsNullOrEmpty(tbOrderNo.Text);
+
+            // Trộn (merge) các lệnh mới lấy từ hàng đợi vào dictionary
+            foreach (Order order in orderItems)
+            {
+                try
+                {
+                    // Lấy OrderNo và parse sang int
+                    int orderId = int.Parse(order.OrderNo);
+
+                    // Nếu orderId nhỏ hơn minOrderId và minOrderId != int.MaxValue thì bỏ qua
+                    // (Có thể hiểu đây là tránh hiển thị các lệnh cũ hơn một ngưỡng nhất định)
+                    if (orderId < minOrderId && minOrderId != int.MaxValue)
+                    {
+                        continue;
+                    }
+
+                    // Kiểm tra điều kiện group (nếu group = "ALL" thì bỏ qua bước lọc)
+                    if (group == "ALL" || order.Group == group)
+                    {
+                        // Nếu đang ở trang đầu, không có bộ lọc tài khoản, symbol, mktId, ...
+                        // hoặc lệnh thỏa các điều kiện lọc thì mới thêm/cập nhật
+                        if (filterPage &&
+                            (string.IsNullOrEmpty(filterAccount) || filterAccount == order.AccountCode) &&
+                            (string.IsNullOrEmpty(filterSymbol) || filterSymbol == order.Symbol.ToUpper()) &&
+                            (string.IsNullOrEmpty(filterMktId) || filterMktId == order.MktId))
+                        {
+                            // Nếu trong dictionary đã có key = PkOrderNo này thì cập nhật Order
+                            if (orderDict.ContainsKey(order.PkOrderNo))
+                            {
+                                orderDict[order.PkOrderNo].Order = order;
+                            }
+                            else
+                            {
+                                // Nếu chưa có thì tạo mới một OrderItem và thêm vào dictionary
+                                OrderItem orderItem = new OrderItem
+                                {
+                                    Item = null,
+                                    Order = order,
+                                    OrderNo = orderId,
+                                    PkOrderNo = order.PkOrderNo
+                                };
+                                orderDict.Add(orderItem.PkOrderNo, orderItem);
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                    // Nếu parse lỗi hoặc lỗi khác, có thể ghi log hoặc xử lý
+                }
+            }
+
+            // Lấy danh sách các lệnh đã cập nhật xong trong dictionary
+            // Sắp xếp theo OrderNo giảm dần, sau đó lấy m_rowCount phần tử đầu, rồi đảo ngược
+            // để hiển thị theo thứ tự tăng dần (nếu đó là ý định)
+            var updateOrders = orderDict.Values
+                .OrderByDescending(x => x.OrderNo)
+                .Take(m_rowCount)
+                .Reverse()
+                .ToList();
+
+            // Tạo event để đồng bộ (đợi cho tới khi giao diện cập nhật xong)
+            ManualResetEvent resetEvent = new ManualResetEvent(false);
+
+            // Thao tác thay đổi giao diện (UI) phải gọi qua SafeInvoke để tránh lỗi cross-thread
+            this.SafeInvoke(() =>
+            {
+                // Khóa ListView để tránh tranh chấp dữ liệu
+                lock (m_lvOrderLock)
+                {
+                    // Đánh dấu cho resetEvent đã có thể gọi .WaitOne() hoàn tất
+                    resetEvent.Set();
+
+                    // Bắt đầu cập nhật giao diện
+                    lvOrder.BeginUpdate();
+
+                    // Duyệt qua danh sách các orderItem cần cập nhật hiển thị
+                    foreach (OrderItem orderItem in updateOrders)
+                    {
+                        // Nếu orderItem có chứa dữ liệu lệnh (Order != null)
+                        if (orderItem.Order != null)
+                        {
+                            // Gọi hàm thêm hoặc cập nhật lệnh lên ListView
+                            AddOrUpdateNewOrder(orderItem.Order, orderItem.Item);
+                        }
+                    }
+
+                    // Nếu nút PageDown đang bị vô hiệu và ListView đã đủ số dòng, bật nút lên
+                    if (!btnPageDown.Enabled && lvOrder.Items.Count >= m_rowCount)
+                    {
+                        btnPageDown.Enabled = true;
+                    }
+
+                    // Kết thúc cập nhật giao diện
+                    lvOrder.EndUpdate();
+                }
+            });
+
+            // Đợi cho đến khi giao diện cập nhật xong
+            resetEvent.WaitOne();
+            resetEvent.Dispose();
+        }
+
+        // Tạm dừng Thread một khoảng thời gian (sleepTime) để tránh vòng lặp chạy quá nhanh
+        Thread.Sleep(sleepTime);
+    }
+}
