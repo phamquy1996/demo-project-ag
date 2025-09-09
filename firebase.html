@@ -1,114 +1,48 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <title>Test FCM Token</title>
+  <title>FCM Simple Test</title>
   <script src="https://www.gstatic.com/firebasejs/12.2.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/12.2.1/firebase-messaging-compat.js"></script>
 </head>
 <body>
-  <h2>Firebase Cloud Messaging - Lấy Token</h2>
-  <button onclick="getFcmToken()">Get Token</button>
-  <pre id="output"></pre>
+  <button onclick="simpleTest()">Simple Test</button>
+  <div id="result"></div>
 
   <script>
-    const firebaseConfig = {
+    firebase.initializeApp({
       apiKey: "AIzaSyDHgZwBkp2syivHbLWM6Tgu3UoDBAQB8r0",
-      authDomain: "smartonetestnoti.firebaseapp.com",
       projectId: "smartonetestnoti",
-      storageBucket: "smartonetestnoti.appspot.com",
       messagingSenderId: "419243653443",
       appId: "1:419243653443:web:26348d8c428f2688c8d7f6"
-    };
+    });
 
-    const VAPID_KEY = "BCyq847B47TWps5HpECr2g9ebsQau3oLmKmyLAm3liG_bvhbSnM57-sksHfvYasph1np0p_SnuIItuu_Gnm4O0A";
-
-    console.log('Initializing Firebase...');
-    firebase.initializeApp(firebaseConfig);
-    console.log('Firebase initialized');
-    
-    const messaging = firebase.messaging();
-    console.log('Messaging instance created:', messaging);
-
-    async function getFcmToken() {
-      const output = document.getElementById("output");
-      output.textContent = "Bắt đầu...";
-      
+    async function simpleTest() {
       try {
-        console.log('Step 1: Checking service worker support');
-        if (!('serviceWorker' in navigator)) {
-          throw new Error('Service Worker không được hỗ trợ');
-        }
-
-        console.log('Step 2: Registering service worker');
-        output.textContent = "Đang đăng ký service worker...";
-        const reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-        console.log('Service Worker registered successfully:', reg);
-
-        console.log('Step 3: Requesting notification permission');
-        output.textContent = "Đang yêu cầu quyền notification...";
         const permission = await Notification.requestPermission();
-        console.log('Permission result:', permission);
-        
         if (permission !== 'granted') {
-          output.textContent = "Permission denied: " + permission;
-          return;
+          throw new Error('Permission denied');
         }
 
-        console.log('Step 4: About to call getToken');
-        output.textContent = "Đang gọi getToken...";
+        const messaging = firebase.messaging();
         
-        // Thử cách đơn giản nhất trước
-        console.log('Calling messaging.getToken() without any parameters');
-        const token1 = await messaging.getToken();
-        console.log('Token without params:', token1);
+        // Thử KHÔNG dùng VAPID key trước
+        console.log('Getting token WITHOUT VAPID...');
+        const token = await messaging.getToken();
         
-        if (token1) {
-          output.textContent = "Token (no params): " + token1;
-          return;
-        }
-
-        console.log('Trying with VAPID key only');
-        const token2 = await messaging.getToken({
-          vapidKey: VAPID_KEY
-        });
-        console.log('Token with VAPID:', token2);
-        
-        output.textContent = token2 || "Không lấy được token";
+        document.getElementById('result').innerHTML = `
+          <strong>SUCCESS!</strong><br>
+          Token: ${token}
+        `;
+        console.log('Token:', token);
         
       } catch (err) {
-        console.error('Error details:', err);
-        console.error('Error stack:', err.stack);
-        output.textContent = "Error: " + err.message;
+        document.getElementById('result').innerHTML = `
+          <strong>ERROR:</strong> ${err.message}
+        `;
+        console.error('Error:', err);
       }
     }
-async function debugEnvironment() {
-  console.log('=== ENVIRONMENT DEBUG ===');
-  console.log('User Agent:', navigator.userAgent);
-  console.log('Service Worker support:', 'serviceWorker' in navigator);
-  console.log('Notification support:', 'Notification' in window);
-  console.log('Notification permission:', Notification.permission);
-  console.log('Location:', window.location.href);
-  console.log('Secure context:', window.isSecureContext);
-  
-  // Test network connectivity to Firebase
-  try {
-    const response = await fetch('https://firebaseinstallations.googleapis.com/', {mode: 'no-cors'});
-    console.log('Firebase API reachable');
-  } catch (err) {
-    console.log('Firebase API blocked:', err);
-  }
-  
-  // Test if Firebase Messaging is supported
-  if (firebase.messaging.isSupported()) {
-    console.log('Firebase Messaging: SUPPORTED');
-  } else {
-    console.log('Firebase Messaging: NOT SUPPORTED');
-  }
-}
-
-// Gọi function này trước khi test token
-debugEnvironment();
   </script>
 </body>
 </html>
