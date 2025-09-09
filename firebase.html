@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>Test FCM Token</title>
+</head>
+<body>
+  <h2>Firebase Cloud Messaging - Lấy Token</h2>
+  <button onclick="getFcmToken()">Get Token</button>
+  <pre id="output"></pre>
+
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js';
+    import { getMessaging, getToken } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-messaging.js';
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDHgZwBkp2syivHbLWM6Tgu3UoDBAQB8r0",
+      authDomain: "smartonetestnoti.firebaseapp.com",
+      projectId: "smartonetestnoti",
+      storageBucket: "smartonetestnoti.appspot.com",
+      messagingSenderId: "419243653443",
+      appId: "1:419243653443:web:26348d8c428f2688c8d7f6"
+    };
+
+    const VAPID_KEY = "BCyq847B47TWps5HpECr2g9ebsQau3oLmKmyLAm3liG_bvhbSnM57-sksHfvYasph1np0p_SnuIItuu_Gnm4O0A";
+
+    const app = initializeApp(firebaseConfig);
+    const messaging = getMessaging(app);
+
+    window.getFcmToken = async function() {
+      const output = document.getElementById("output");
+      output.textContent = "Đang khởi tạo...";
+      
+      try {
+        output.textContent = "Đang yêu cầu quyền notification...";
+        const permission = await Notification.requestPermission();
+        
+        if (permission !== 'granted') {
+          output.textContent = "Permission denied";
+          return;
+        }
+
+        output.textContent = "Đang lấy FCM token...";
+        
+        const token = await getToken(messaging, {
+          vapidKey: VAPID_KEY
+        });
+
+        output.textContent = token || "Không lấy được token";
+        console.log("FCM Token:", token);
+        
+      } catch (err) {
+        output.textContent = "Error: " + err.message;
+        console.error('Detailed error:', err);
+      }
+    }
+  </script>
+</body>
+</html>
