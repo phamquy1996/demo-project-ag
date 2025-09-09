@@ -3,16 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <title>Test FCM Token</title>
+  <script src="https://www.gstatic.com/firebasejs/12.2.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.2.1/firebase-messaging-compat.js"></script>
 </head>
 <body>
   <h2>Firebase Cloud Messaging - Lấy Token</h2>
   <button onclick="getFcmToken()">Get Token</button>
   <pre id="output"></pre>
 
-  <script type="module">
-    import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js';
-    import { getMessaging, getToken } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-messaging.js';
-
+  <script>
     const firebaseConfig = {
       apiKey: "AIzaSyDHgZwBkp2syivHbLWM6Tgu3UoDBAQB8r0",
       authDomain: "smartonetestnoti.firebaseapp.com",
@@ -24,34 +23,63 @@
 
     const VAPID_KEY = "BCyq847B47TWps5HpECr2g9ebsQau3oLmKmyLAm3liG_bvhbSnM57-sksHfvYasph1np0p_SnuIItuu_Gnm4O0A";
 
-    const app = initializeApp(firebaseConfig);
-    const messaging = getMessaging(app);
+    console.log('Initializing Firebase...');
+    firebase.initializeApp(firebaseConfig);
+    console.log('Firebase initialized');
+    
+    const messaging = firebase.messaging();
+    console.log('Messaging instance created:', messaging);
 
-    window.getFcmToken = async function() {
+    async function getFcmToken() {
       const output = document.getElementById("output");
-      output.textContent = "Đang khởi tạo...";
+      output.textContent = "Bắt đầu...";
       
       try {
+        console.log('Step 1: Checking service worker support');
+        if (!('serviceWorker' in navigator)) {
+          throw new Error('Service Worker không được hỗ trợ');
+        }
+
+        console.log('Step 2: Registering service worker');
+        output.textContent = "Đang đăng ký service worker...";
+        const reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        console.log('Service Worker registered successfully:', reg);
+
+        console.log('Step 3: Requesting notification permission');
         output.textContent = "Đang yêu cầu quyền notification...";
         const permission = await Notification.requestPermission();
+        console.log('Permission result:', permission);
         
         if (permission !== 'granted') {
-          output.textContent = "Permission denied";
+          output.textContent = "Permission denied: " + permission;
           return;
         }
 
-        output.textContent = "Đang lấy FCM token...";
+        console.log('Step 4: About to call getToken');
+        output.textContent = "Đang gọi getToken...";
         
-        const token = await getToken(messaging, {
+        // Thử cách đơn giản nhất trước
+        console.log('Calling messaging.getToken() without any parameters');
+        const token1 = await messaging.getToken();
+        console.log('Token without params:', token1);
+        
+        if (token1) {
+          output.textContent = "Token (no params): " + token1;
+          return;
+        }
+
+        console.log('Trying with VAPID key only');
+        const token2 = await messaging.getToken({
           vapidKey: VAPID_KEY
         });
-
-        output.textContent = token || "Không lấy được token";
-        console.log("FCM Token:", token);
+        console.log('Token with VAPID:', token2);
+        
+        output.textContent = token2 || "Không lấy được token";
         
       } catch (err) {
+        console.error('Error details:', err);
+        console.error('Error stack:', err.stack);
         output.textContent = "Error: " + err.message;
-        console.error('Detailed error:', err);
       }
     }
   </script>
