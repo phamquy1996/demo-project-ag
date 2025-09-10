@@ -46,3 +46,15 @@
   </script>
 </body>
 </html>
+const criticalEndpoints = [
+  'https://android.clients.google.com/c2dm/register3',
+  'https://fcm.googleapis.com/',
+  'https://firebaseinstallations.googleapis.com/',
+  'https://clients2.google.com/'
+];
+
+criticalEndpoints.forEach(url => {
+  fetch(url, {method: 'HEAD', mode: 'no-cors'})
+    .then(() => console.log(`✅ ${url}`))
+    .catch(() => console.log(`❌ ${url} - BLOCKED`));
+});
