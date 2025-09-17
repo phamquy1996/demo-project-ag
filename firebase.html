@@ -1,60 +1,382 @@
 <!DOCTYPE html>
-<html>
+<html lang="vi">
 <head>
-  <title>FCM Simple Test</title>
-  <script src="https://www.gstatic.com/firebasejs/12.2.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/12.2.1/firebase-messaging-compat.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test FCM với DevTools</title>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    button {
+      background: #4285f4;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 10px 5px;
+      font-size: 14px;
+    }
+    button:hover { background: #3367d6; }
+    #output {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 4px;
+      white-space: pre-wrap;
+      margin: 10px 0;
+      border-left: 4px solid #4285f4;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .status {
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 4px;
+    }
+    .success { background: #d4edda; color: #155724; }
+    .error { background: #f8d7da; color: #721c24; }
+    .info { background: #d1ecf1; color: #0c5460; }
+    .token-display {
+      font-family: monospace;
+      font-size: 12px;
+      background: #f8f9fa;
+      padding: 10px;
+      border-radius: 4px;
+      word-break: break-all;
+      margin: 10px 0;
+    }
+    .instructions {
+      background: #fff3cd;
+      padding: 15px;
+      border-radius: 4px;
+      margin: 15px 0;
+      border-left: 4px solid #ffc107;
+    }
+  </style>
 </head>
 <body>
-  <button onclick="simpleTest()">Simple Test</button>
-  <div id="result"></div>
+  <div class="container">
+    <h2>🔧 Test FCM với DevTools Push Messaging</h2>
+    
+    <div class="instructions">
+      <h3>📋 Hướng dẫn sử dụng:</h3>
+      <ol>
+        <li>Click "Khởi tạo FCM" để lấy token và đăng ký service worker</li>
+        <li>Mở DevTools (F12) → Tab Application → Service workers</li>
+        <li>Tìm section "Push messaging" bên dưới</li>
+        <li>Nhập message JSON vào ô text và click "Push"</li>
+        <li>Click vào notification để test chuyển hướng</li>
+      </ol>
+    </div>
+    
+    <div id="status"></div>
+    
+    <button onclick="initializeFCM()">🚀 Khởi tạo FCM</button>
+    <button onclick="clearAllServiceWorkers()">🧹 Clear Service Workers</button>
+    <button onclick="checkServiceWorkerStatus()">🔍 Check SW Status</button>
+    <button onclick="clearLogs()">📝 Clear Logs</button>
+    
+    <div id="token-section" style="display: none;">
+      <h3>📱 FCM Token:</h3>
+      <div id="token-display" class="token-display"></div>
+      <button onclick="copyToken()">📋 Copy Token</button>
+    </div>
+
+    <div id="message-examples" style="display: none;">
+      <h3>📝 Message Examples cho DevTools:</h3>
+      
+      <h4>1. Basic notification:</h4>
+      <textarea readonly onclick="this.select()" style="width: 100%; height: 120px; font-family: monospace; font-size: 12px;">
+{
+  "notification": {
+    "title": "Test từ DevTools",
+    "body": "Click để mở Google!",
+    "click_action": "https://google.com"
+  }
+}
+      </textarea>
+      
+      <h4>2. Notification với data:</h4>
+      <textarea readonly onclick="this.select()" style="width: 100%; height: 140px; font-family: monospace; font-size: 12px;">
+{
+  "notification": {
+    "title": "Test với Data",
+    "body": "Notification có custom data"
+  },
+  "data": {
+    "click_action": "https://youtube.com",
+    "custom_key": "custom_value"
+  }
+}
+      </textarea>
+      
+      <h4>3. Chỉ có data (silent notification):</h4>
+      <textarea readonly onclick="this.select()" style="width: 100%; height: 100px; font-family: monospace; font-size: 12px;">
+{
+  "data": {
+    "title": "Silent Push",
+    "body": "Background notification",
+    "click_action": "https://github.com"
+  }
+}
+      </textarea>
+    </div>
+
+    <div id="output"></div>
+  </div>
 
   <script>
-    firebase.initializeApp({
+    const firebaseConfig = {
       apiKey: "AIzaSyDHgZwBkp2syivHbLWM6Tgu3UoDBAQB8r0",
+      authDomain: "smartonetestnoti.firebaseapp.com",
       projectId: "smartonetestnoti",
+      storageBucket: "smartonetestnoti.appspot.com",
       messagingSenderId: "419243653443",
       appId: "1:419243653443:web:26348d8c428f2688c8d7f6"
-    });
+    };
 
-    async function simpleTest() {
+    const VAPID_KEY = "BCyq847B47TWps5HpECr2g9ebsQau3oLmKmyLAm3liG_bvhbSnM57-sksHfvYasph1np0p_SnuIItuu_Gnm4O0A";
+
+    let messaging;
+    let currentToken = '';
+
+    function updateStatus(message, type = 'info') {
+      const statusDiv = document.getElementById('status');
+      statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
+    }
+
+    function log(message) {
+      const output = document.getElementById('output');
+      const timestamp = new Date().toLocaleTimeString();
+      output.textContent += `[${timestamp}] ${message}\n`;
+      output.scrollTop = output.scrollHeight;
+      console.log(message);
+    }
+
+    function clearLogs() {
+      document.getElementById('output').textContent = '';
+    }
+
+    async function clearAllServiceWorkers() {
       try {
-        const permission = await Notification.requestPermission();
-        if (permission !== 'granted') {
-          throw new Error('Permission denied');
+        log('🧹 Clearing all service workers...');
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        
+        for (let registration of registrations) {
+          await registration.unregister();
+          log('✅ Unregistered: ' + registration.scope);
         }
-
-        const messaging = firebase.messaging();
         
-        // Thử KHÔNG dùng VAPID key trước
-        console.log('Getting token WITHOUT VAPID...');
-        const token = await messaging.getToken();
+        // Clear caches
+        const cacheNames = await caches.keys();
+        for (let cacheName of cacheNames) {
+          await caches.delete(cacheName);
+          log('✅ Deleted cache: ' + cacheName);
+        }
         
-        document.getElementById('result').innerHTML = `
-          <strong>SUCCESS!</strong><br>
-          Token: ${token}
-        `;
-        console.log('Token:', token);
+        updateStatus('✅ Đã xóa tất cả service workers và caches. Reload page để bắt đầu lại.', 'success');
         
-      } catch (err) {
-        document.getElementById('result').innerHTML = `
-          <strong>ERROR:</strong> ${err.message}
-        `;
-        console.error('Error:', err);
+        // Auto reload after 2 seconds
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+        
+      } catch (error) {
+        log('❌ Error clearing service workers: ' + error.message);
       }
     }
+
+    async function checkServiceWorkerStatus() {
+      try {
+        log('🔍 Checking service worker status...');
+        
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        log(`Found ${registrations.length} service worker(s)`);
+        
+        registrations.forEach((reg, index) => {
+          log(`SW ${index + 1}: ${reg.scope}`);
+          log(`  - Active: ${reg.active ? reg.active.scriptURL : 'None'}`);
+          log(`  - Installing: ${reg.installing ? reg.installing.scriptURL : 'None'}`);
+          log(`  - Waiting: ${reg.waiting ? reg.waiting.scriptURL : 'None'}`);
+        });
+        
+        log(`Controller: ${navigator.serviceWorker.controller ? navigator.serviceWorker.controller.scriptURL : 'None'}`);
+        log(`Ready state: ${await navigator.serviceWorker.ready ? 'Ready' : 'Not ready'}`);
+        
+      } catch (error) {
+        log('❌ Error checking status: ' + error.message);
+      }
+    }
+
+    async function initializeFCM() {
+      try {
+        updateStatus('🔄 Đang khởi tạo Firebase...', 'info');
+        log('Bắt đầu khởi tạo FCM...');
+
+        // Kiểm tra support
+        if (!('serviceWorker' in navigator)) {
+          throw new Error('Service Worker không được hỗ trợ');
+        }
+
+        if (!('Notification' in window)) {
+          throw new Error('Notification không được hỗ trợ');
+        }
+
+        // BƯỚC 1: Xóa tất cả service workers cũ
+        log('🧹 Cleaning up old service workers...');
+        const existingRegistrations = await navigator.serviceWorker.getRegistrations();
+        for (let registration of existingRegistrations) {
+          await registration.unregister();
+          log('Đã xóa service worker: ' + registration.scope);
+        }
+
+        // BƯỚC 2: Đợi một chút để đảm bảo cleanup hoàn tất
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // BƯỚC 3: Đăng ký service worker mới
+        log('📝 Đăng ký Service Worker mới...');
+        const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+          updateViaCache: 'none' // Force update
+        });
+        log('Service Worker đăng ký thành công: ' + registration.scope);
+
+        // BƯỚC 4: Đợi service worker activate
+        if (registration.installing) {
+          log('⏳ Đợi service worker installing...');
+          await new Promise((resolve) => {
+            registration.installing.addEventListener('statechange', (e) => {
+              if (e.target.state === 'activated') {
+                resolve();
+              }
+            });
+          });
+        }
+
+        // BƯỚC 5: Đảm bảo service worker đã active
+        await navigator.serviceWorker.ready;
+        log('✅ Service Worker đã sẵn sàng và active');
+
+        // BƯỚC 6: Kiểm tra trạng thái controller
+        if (!navigator.serviceWorker.controller) {
+          log('⚠️ Chưa có controller, reload page...');
+          window.location.reload();
+          return;
+        }
+
+        log('✅ Service Worker controller: ' + navigator.serviceWorker.controller.scriptURL);
+
+        // Khởi tạo Firebase
+        if (!firebase.apps.length) {
+          firebase.initializeApp(firebaseConfig);
+          log('Firebase app khởi tạo thành công');
+        }
+        
+        messaging = firebase.messaging();
+
+        // Yêu cầu quyền thông báo
+        log('Yêu cầu quyền thông báo...');
+        const permission = await Notification.requestPermission();
+        log('Notification permission: ' + permission);
+        
+        if (permission !== 'granted') {
+          throw new Error('Quyền thông báo bị từ chối');
+        }
+
+        // Lấy FCM token
+        log('Lấy FCM token...');
+        const token = await messaging.getToken({
+          vapidKey: VAPID_KEY,
+          serviceWorkerRegistration: registration
+        });
+
+        if (token) {
+          currentToken = token;
+          document.getElementById('token-display').textContent = token;
+          document.getElementById('token-section').style.display = 'block';
+          document.getElementById('message-examples').style.display = 'block';
+          
+          updateStatus('✅ FCM khởi tạo thành công! Bây giờ bạn có thể dùng DevTools Push.', 'success');
+          log('FCM Token nhận được thành công');
+          log('Bạn có thể test bằng DevTools Push Messaging ngay bây giờ!');
+        } else {
+          throw new Error('Không thể lấy FCM token');
+        }
+
+        // Listen cho messages khi app đang foreground
+        messaging.onMessage((payload) => {
+          log('📱 Message nhận được (foreground): ' + JSON.stringify(payload, null, 2));
+          
+          // Hiển thị notification thủ công cho foreground
+          if (payload.notification) {
+            new Notification(payload.notification.title, {
+              body: payload.notification.body,
+              icon: '/firebase-logo.png',
+              data: {
+                click_action: payload.notification.click_action || payload.data?.click_action
+              }
+            }).onclick = function() {
+              window.open(this.data.click_action || 'https://google.com', '_blank');
+              this.close();
+            };
+          }
+        });
+
+        // Token refresh listener
+        // messaging.onTokenRefresh(() => {
+        //   log('🔄 Token đã được refresh');
+        //   messaging.getToken({ vapidKey: VAPID_KEY }).then((refreshedToken) => {
+        //     log('New token: ' + refreshedToken);
+        //     currentToken = refreshedToken;
+        //     document.getElementById('token-display').textContent = refreshedToken;
+        //   });
+        // });
+
+      } catch (error) {
+        updateStatus('❌ Lỗi: ' + error.message, 'error');
+        log('❌ Error: ' + error.message);
+        console.error('FCM Error:', error);
+      }
+    }
+
+    function copyToken() {
+      if (currentToken) {
+        navigator.clipboard.writeText(currentToken).then(() => {
+          updateStatus('✅ Token đã được copy vào clipboard!', 'success');
+        }).catch(() => {
+          // Fallback for older browsers
+          const textArea = document.createElement('textarea');
+          textArea.value = currentToken;
+          document.body.appendChild(textArea);
+          textArea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textArea);
+          updateStatus('✅ Token đã được copy!', 'success');
+        });
+      }
+    }
+
+    // Auto start when page loads
+    window.addEventListener('load', () => {
+      log('✨ Trang đã tải xong. Click "Khởi tạo FCM" để bắt đầu test!');
+    });
+
+    // Listen for service worker messages
+    navigator.serviceWorker.addEventListener('message', event => {
+      log('📨 Message từ Service Worker: ' + JSON.stringify(event.data));
+    });
   </script>
 </body>
 </html>
-const criticalEndpoints = [
-  'https://android.clients.google.com/c2dm/register3',
-  'https://fcm.googleapis.com/',
-  'https://firebaseinstallations.googleapis.com/',
-  'https://clients2.google.com/'
-];
-
-criticalEndpoints.forEach(url => {
-  fetch(url, {method: 'HEAD', mode: 'no-cors'})
-    .then(() => console.log(`✅ ${url}`))
-    .catch(() => console.log(`❌ ${url} - BLOCKED`));
-});
