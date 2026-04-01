@@ -4,6 +4,7 @@ objOrderPanel.WK_UpdateOrderPanel = function (res) {
     const newPk = parseInt(res.pk_orderNo) || 0;
     const $newRow = $(res.data);
     let inserted = false;
+    let $lastDataRow = null;
 
     $('#tbodyContent tr').each(function () {
         const $this = $(this);
@@ -17,12 +18,18 @@ objOrderPanel.WK_UpdateOrderPanel = function (res) {
                 inserted = true;
                 return false; // break $.each
             }
+            $lastDataRow = $this; // Theo dõi row data cuối cùng
         }
     });
 
     if (!inserted) {
-        // pk nhỏ nhất hoặc bảng trống → append cuối
-        $('#tbodyContent').append($newRow);
+        if ($lastDataRow) {
+            // newPk nhỏ hơn tất cả data rows → chèn sau row data cuối
+            $lastDataRow.after($newRow);
+        } else {
+            // Bảng trống hoặc chỉ có placeholder → prepend lên đầu
+            $('#tbodyContent').prepend($newRow);
+        }
     }
 
     objOrderPanel.updateMax(res.pk_orderNo);
