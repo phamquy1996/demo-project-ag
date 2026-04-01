@@ -1,570 +1,2949 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html dir="ltr" xmlns="http://www.w3.org/1999/xhtml" xmlns:o="urn:schemas-microsoft-com:office:office" lang="vi">
- <head>
-  <meta charset="UTF-8">
-  <meta content="width=device-width, initial-scale=1" name="viewport">
-  <meta name="x-apple-disable-message-reformatting">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta content="telephone=no" name="format-detection">
-  <title>New Message</title><!--[if (mso 16)]>
-    <style type="text/css">
-    a {text-decoration: none;}
-    </style>
-    <![endif]--><!--[if gte mso 9]><style>sup { font-size: 100% !important; }</style><![endif]--><!--[if gte mso 9]>
-<noscript>
-         <xml>
-           <o:OfficeDocumentSettings>
-           <o:AllowPNG></o:AllowPNG>
-           <o:PixelsPerInch>96</o:PixelsPerInch>
-           </o:OfficeDocumentSettings>
-         </xml>
-      </noscript>
-<![endif]-->
-  <style type="text/css">
-.rollover:hover .rollover-first {
-  max-height:0px!important;
-  display:none!important;
+objOrderPanel.name = 'orderPanel';
+objOrderPanel.numberRow = 6;
+objOrderPanel.numberRow2 = 18;
+objOrderPanel.numberRow3 = 12;
+objOrderPanel.no = 0;
+objOrderPanel.seq = 0;
+objOrderPanel.interval = 1;
+objOrderPanel.timer;
+objOrderPanel.create = 0;
+objOrderPanel.screen = '';
+objOrderPanel.orderSeq = 0;
+objOrderPanel.max_PK = 0;
+objOrderPanel.max_PK2 = 0;
+objOrderPanel.pie;
+let tickerTime = 0;
+let tickerTimeLV = 0;
+let timeoutReload = 0;
+let timoutReloadCondition = 0;
+let timeoutReloadLV = 0;
+let priceLock = 0;
+let volLock = 0;
+let oldFilter = "";
+let page = "1";
+let orderQueueMissingData = [];
+const btnEdit = '<img src="./Common/img/icon/btnEdit.svg" alt="btn-edit" />'
+const btnCancel = '<img src="./Common/img/icon/btnCancel.svg" alt="btn-cancel" />'
+let keyOrder = new Set();
+const keyMainOrder = new Set();
+const matchOneCancel = "Khớp 1 phần đã hủy";
+const matchOnePart = "Khớp 1 phần";
+
+objOrderPanel.init = function () {
+    // load danh sach lenh
+    objOrderPanel.showOrderList();
+    // start queue
+    objOrderPanel.initQueue();
 }
-.rollover:hover .rollover-second {
-  max-height:none!important;
-  display:block!important;
+objOrderPanel.initQueue = function () {
+    window.orderQueue = $.jqmq({
+        delay: -1,
+        batch: 1,
+        callback: function (idata) {
+            if (idata.stopOrderType == 'trailing_stop' || idata.stopOrderType == 'stop' || idata.stopOrderType == 'sl_tp' || idata.stopOrderType === 'oco') {
+                try {
+                    objOrderPanel.updateOrderConditionRealtime(idata);
+                }
+                catch (e) {
+                    console.log("[DEBUG] - error = " + idata + " err =" + e.message);
+                }
+            } else {
+                try {
+                    if (idata.accountCode && idata.accountCode.endsWith('8')) {
+
+                        //console.log("[RECV] - " + idata );
+                        objOrderPanel.updateOrder(idata);
+
+                        // cập nhật lại vị thế theo đường socket
+                        if (idata.type == 'DEAL_FU') {
+                            const symbol = idata.data?.symbol;
+                            const pos_by_deal = idata.data?.pos_by_deal;
+                            const version = idata.data?.seq_version;
+
+                            objOrderPanel.updatePosByDeal(symbol, pos_by_deal, version);
+                        }
+                    }
+
+                }
+                catch (e) {
+                    console.log("[DEBUG] - error = " + idata + " err =" + e.message);
+                }
+            }
+
+            orderQueue.next();
+        },
+        // When the queue completes naturally, execute this function.
+        complete: function () {
+            //alert('complete');
+        }
+    });
 }
-.rollover span {
-  font-size:0px;
+
+objOrderPanel.showOrderList = function (isFilter) {
+    if (objOrderPanel.screen == 'advance') {
+        objOrderPanel.showConditionOrderList(isFilter);
+        return false;
+    }
+    var filter = $('input[name=statusFilter]:checked').val();
+    try {
+        // get data
+        console.debug('Load danh sach lenh trong ngay');
+        // alert(1)
+        clearTimeout(timeoutReload);
+        tickerTime = new Date().getTime();
+        const currPage = Number($('#hdnPageCurrentIntime').val());
+        const selPage = currPage && currPage > 0 ? currPage : 1;
+        var accountNo = $('#right_account').val();
+        //var number = $('#txtNumberRecordPerPage').val();
+        // var pData = { group: "Q", user: global.user, session: global.sid, c: "H", data: { type: "string", cmd: "Web.Order.IndayOrder", p1: "" + selPage, p2: "" + objOrderPanel.numberRow, p3: global.user +"8", p4: filter + "" } };
+        var pData = {
+            group: "Q",
+            user: global.user,
+            session: global.sid,
+            c: "H",
+            data: {
+                type: "string",
+                cmd: "Web.Order.FullAllOrder",
+                p1: "" + selPage,
+                p2: "" + objOrderPanel.numberRow,
+                p3: global.user + "8" + ",ALL," + "ALL", // modal.accountSelected + "," + modal.channel + ',' + modal.symbolFilter,
+                p4: filter
+            }
+        }
+        $.ajax({
+            type: "POST",
+            url: urlCore,
+            cache: false,
+            data: JSON.stringify(pData),
+            contentType: "application/json; charset=utf-8",
+            dataType: "json",
+            timeout: 1000,
+            success: function (vData) {
+                $('#btn_cancel_all_normal').prop('disabled', true);
+                // console.log(vData);   
+                // console.log(defAccount);
+                if (vData.rc > 0) {
+                    if ((!vData.hasOwnProperty('data') || vData.data.length == 0) && selPage > 1) {
+                        $('#hdnPageCurrentIntime').val(parseInt($('#hdnPageCurrentIntime').val()) - 1);
+                        $('#divProcessButton').find('#A2').text('| ' + $('#hdnPageCurrentIntime').val() + ' |');
+                        if (vData.data.length === 0) {
+                            $('#btn_cancel_all_normal').prop('disabled', false);
+                        }
+                    } else {
+                        // clear page
+                        if (oldFilter != filter || page != selPage) {
+                            objOrderPanel.clearKeyOrder();
+                        }
+
+                        var rData = vData.data.reverse();
+                        // console.log(rData)
+                        objOrderPanel.max_PK = 0;
+                        // phái sinh
+                        if (!_.isUndefined(defAccount)) {
+                            var listOrderPs = _.filter(rData, function (o) { return o.accountCode == defAccount.accCode; });
+                            // keyOrder.clear();
+                            // objOrderPanel.updateMax(res.pk_orderNo);
+                            // console.log(keyOrder, "keyOrder")
+                            $.each(listOrderPs, function (i, idata) {
+                                objOrderPanel.insertNewRow(idata, i);
+                                objOrderPanel.no = (i + 1);
+                            });
+                        }
+                        if (vData.data.length > 0) {
+                            $('#btn_cancel_all_normal').prop('disabled', false);
+                        }
+                        // console.log($('#order_normal').find('tr'), "$('#order_normal').find('tr')")
+                        // setTimeout(() => {
+                        // 	let rows = $('#tbodyContent tr');
+                        // 	if (rows.length > 6) {
+                        // 		rows.slice(6).remove();
+                        // 	}
+                        // 	oldFilter = filter;
+                        // 	page = selPage;
+                        // }, 1)
+                        oldFilter = filter;
+                        page = selPage;
+                    }
+                    timeoutReload = setTimeout(() => {
+                        let currentHour = new Date(serverTime).getHours() || new Date().getHours();
+                        if (objOrderPanel.screen !== "advance") {
+                            objOrderPanel.showOrderList();
+                        }
+                    }, timeIntervalReload);
+                } else {
+                    console.log(vData);
+                    if (vData.rc == -1 && (vData.rs == "FOException.InvalidSessionException" || vData.rs.includes('NotLoginException'))) {
+                        if (bootboxshow == 0) {
+                            bootboxshow = 1;
+                            if (objPage.timer != null) clearTimeout(objPage.timer);
+                            loginConfirm();
+                        }
+                    } else {
+                        shownotification('Warning', getMessage(vData.rc, vData.rs), 'warning');
+                    }
+                }
+            },
+            error: function (err) {
+
+            }
+        });
+    }
+    catch (e) {
+    }
 }
-u + .body img ~ div div {
-  display:none;
+
+objOrderPanel.showOrderListOption1 = function () {
+    var filter = $('input[name=opstatusFilter]:checked').val();
+    var filterVal = filter;
+    const currPage = Number($('#hdnPageCurrentIntime2').val());
+    const selPage = currPage && currPage > 0 ? currPage : 1;
+    switch (filter) {
+        case "1":
+            filterVal = "PENDING";
+            break;
+        case "2":
+            filterVal = "MATCH";
+            break;
+        default:
+            break;
+    }
+    try {
+        // get data
+        //var number = $('#txtNumberRecordPerPage').val();
+        // var pData = { group: "Q", user: global.user, session: global.sid, c: "H", data: { type: "string", cmd: "Web.Order.IndayOrder", p1: "1", p2: "" + 10000,  p3: global.user +"8", p4: filter + "" } };
+        var pData = {
+            group: "Q",
+            user: global.user,
+            session: global.sid,
+            c: "H",
+            data: {
+                type: "string",
+                cmd: "Web.Order.FullAllOrder",
+                p1: "" + selPage,
+                p2: "" + objOrderPanel.numberRow,
+                p3: global.user + "8" + ",ALL," + "ALL",
+                p4: filterVal
+            }
+        }
+        $.ajax({
+            type: "POST",
+            url: urlCore,
+            cache: false,
+            data: JSON.stringify(pData),
+            contentType: "application/json; charset=utf-8",
+            dataType: "json",
+            timeout: 1000,
+            success: function (vData) {
+                if (vData.rc > 0) {
+                    // clear page	
+                    $('#op-order-status').html('');
+                    var rData = vData.data.reverse();
+                    // console.log(rData)
+                    objOrderPanel.max_PK = 0;
+                    // phái sinh
+                    var listOrderPs = _.filter(rData, function (o) { return o.accountCode == defAccount.accCode; });
+                    $.each(listOrderPs, function (i, idata) {
+                        if (window.location.toString().includes('#LiveBoard/1')) {
+                            objOrderPanel.insertNewRowOption1(idata);
+                        }
+                    });
+                } else {
+                    console.log(console.log(vData));
+                    if (vData.rc == -1 && (vData.rs == "FOException.InvalidSessionException" || vData.rs.includes('NotLoginException'))) {
+                        if (bootboxshow == 0) {
+                            bootboxshow = 1;
+                            if (objPage.timer != null) clearTimeout(objPage.timer);
+                            loginConfirm();
+                        }
+                    } else {
+                        shownotification('Warning', getMessage(vData.rc, vData.rs), 'warning');
+                    }
+                }
+            },
+            error: function (err) {
+
+            }
+        });
+    }
+    catch (e) {
+    }
 }
-#outlook a {
-  padding:0;
+
+objOrderPanel.showOrderListView2 = function () {
+    var filter = $('input[name=opstatusFilter]:checked').val();
+    var numberRow = objOrderPanel.numberRow2;
+
+    if ($('.toggle-tab a[tb="3"]').hasClass('active')) {
+        numberRow = objOrderPanel.numberRow3;
+    }
+    try {
+        // get data
+        clearTimeout(timeoutReloadLV);
+        tickerTimeLV = new Date().getTime();
+        const currPage = Number($('#hdnPageCurrentIntime2').val());
+        const selPage = currPage && currPage > 0 ? currPage : 1;
+        //var number = $('#txtNumberRecordPerPage').val();
+        //var pData = { group: "Q", user: global.user, session: global.sid, c: "H", data: { type: "string", cmd: "Web.Order.IndayOrder", p1: "" + selPage, p2: "" + aaaorder,  p3: global.user +"8", p4: filter + "" } };
+        var pData = {
+            group: "Q",
+            user: global.user,
+            session: global.sid,
+            c: "H",
+            data: {
+                type: "string",
+                cmd: "Web.Order.FullAllOrder",
+                p1: "" + selPage,
+                p2: "" + numberRow,
+                p3: global.user + "8" + ",ALL," + "ALL",
+                p4: filter
+            }
+        }
+        $.ajax({
+            type: "POST",
+            url: urlCore,
+            cache: false,
+            data: JSON.stringify(pData),
+            contentType: "application/json; charset=utf-8",
+            dataType: "json",
+            timeout: 1000,
+            success: function (vData) {
+                if (vData.rc > 0) {
+                    if ((!vData.hasOwnProperty('data') || vData.data.length == 0) && selPage > 1) {
+                        $('#hdnPageCurrentIntime2').val(parseInt($('#hdnPageCurrentIntime2').val()) - 1);
+                        $('#divProcessPagging').find('#A222').text('| ' + $('#hdnPageCurrentIntime2').val() + ' |');
+
+                    } else {
+                        // clear page	
+                        $('#op-order-status').html('');
+                        var rData = vData.data.reverse();
+                        // console.log(rData)
+                        objOrderPanel.max_PK2 = 0;
+                        // phái sinh
+                        var listOrderPs = _.filter(rData, function (o) { return o.accountCode == defAccount.accCode; });
+                        keyMainOrder.clear();
+                        $.each(listOrderPs, function (i, idata) {
+                            objOrderPanel.insertNewRowView2(idata);
+                        });
+
+                        //if(global.user == '006356') testOrderList();
+                    }
+                    timeoutReloadLV = setTimeout(() => {
+                        let currentHour = new Date(serverTime).getHours() || new Date().getHours();
+                        if ($(".option1-scr").css("visibility") === "visible" && currentHour < 15) {
+                            objOrderPanel.showOrderListView2();
+                        }
+                    }, timeIntervalReload);
+                } else {
+                    console.log(console.log(vData));
+                    if (vData.rc == -1 && (vData.rs == "FOException.InvalidSessionException" || vData.rs.includes('NotLoginException'))) {
+                        if (bootboxshow == 0) {
+                            bootboxshow = 1;
+                            if (objPage.timer != null) clearTimeout(objPage.timer);
+                            loginConfirm();
+                        }
+                    } else {
+                        shownotification('Warning', getMessage(vData.rc, vData.rs), 'warning');
+                    }
+                }
+            },
+            error: function (err) {
+
+            }
+        });
+    }
+    catch (e) {
+    }
 }
-span.MsoHyperlink,
-span.MsoHyperlinkFollowed {
-  color:inherit;
-  mso-style-priority:99;
+
+objOrderPanel.showConditionOrderList = function (isFilter) {
+    var accountNo = $('#right_account').val();
+    var stockCode = $('#right_stock_cd').val();
+    var filterStatus = $("#footer_btnfilter_status .btn-outline-red").text();
+    var filterOrderType = $("#footer_btnfilter_orcondition .btn-outline-red").text();
+    var filterStatusCode = footerFilterStatus.filter(function (item) {
+        return item.name == filterStatus;
+    });
+    var filterStatusVal = filterStatusCode.length < 0 ? '1' : filterStatusCode[0].val;
+    // filter by order type
+    var filterOrderCode = footerFilterCondition.filter(function (item) {
+        return item.name == filterOrderType;
+    });
+    var filterOrderVal = filterOrderCode.length < 0 ? '1' : filterOrderCode[0].val;
+    var filter = $('input[name=statusFilter]:checked').val();
+    if (filter == '' || filter == null) filter = "1";
+    var today = new Date();
+    var now = formatDate(today);
+    clearTimeout(timoutReloadCondition);
+    tickerTime = new Date().getTime();
+    try {
+        // get data
+        const currPageText = Number($('#hdnPageCurrentIntime').val());
+        const currPage = currPageText && currPageText > 0 ? currPageText : 1;
+        var selPage = isFilter ? '1' : currPage;
+        //var number = $('#txtNumberRecordPerPage').val();
+        // var pData = { group: "Q", user: objUser.user, session: objUser.sid, c: "H", data: { type: "string", cmd: "Web.Order.ConditionOrder", p1: "" + selPage, p2: "8", p3: filterDemo + "", p4: "" } };
+        var pData = {
+            group: "B",
+            user: objUser.user,
+            session: objUser.sid,
+            data: {
+                type: "cursor",
+                cmd: "list_condition_order",
+                p1: accountNo,
+                p2: '',
+                p3: now, // from date
+                p4: now, // to date
+                p5: filterStatusVal + "",
+                p6: filterOrderVal + "",
+                p7: '',
+                p8: "" + selPage,
+                p9: defaultPageSize,
+            }
+        };
+        console.debug('Load danh sach lenh dieu kien');
+        $.ajax({
+            type: "POST",
+            url: urlCore,
+            cache: false,
+            data: JSON.stringify(pData),
+            contentType: "application/json; charset=utf-8",
+            dataType: "json",
+            success: function (vData) {
+                $('#btn_cancel_all_order_condition').prop('disabled', true);
+                //console.log(vData);   
+                if (vData.rc > 0) {
+                    if ((!vData.data || vData.data.length <= 0) && $('#hdnPageCurrentIntime').val() > 1) {
+                        $('#hdnPageCurrentIntime').val(parseInt($('#hdnPageCurrentIntime').val()) - 1);
+                        $('#divProcessButton').find('#A2').text('| ' + $('#hdnPageCurrentIntime').val() + ' |');
+                        if (vData.data.length === 0) {
+                            $('#btn_cancel_all_order_condition').prop('disabled', false);
+                        }
+                        // clear page		
+                        // objOrderPanel.orderConditionClear();
+
+                    } else {
+                        // clear page
+                        if (isFilter) {
+                            $('#hdnPageCurrentIntime').val(1);
+                            $('#divProcessButton').find('#A2').text('| ' + $('#hdnPageCurrentIntime').val() + ' |');
+                        }
+                        objOrderPanel.orderConditionClear();
+                        var rData = vData.data.reverse();
+                        objOrderPanel.max_PK = 0;
+
+                        // phái sinh
+                        var listOrderPs = _.filter(rData, function (o) { return o.ACCOUNT_NO == defAccount.accCode; });
+                        $.each(listOrderPs, function (i, idata) {
+                            objOrderPanel.insertNewRowConditionOrder(idata, i);
+                            objOrderPanel.no = (i + 1);
+                        });
+                        // var secondWidth = $('.second-col').position().left;
+                        // $('.second-col').css({left: secondWidth });
+
+                        // var thirdWidth = $('.third-col').position().left;
+                        // $('.third-col').css({left: thirdWidth});
+
+                        // var fouthWidth = $('.fourth-col').position().left;
+                        // $('.fourth-col').css({left: fouthWidth});
+                        if (vData.data.length > 0) {
+                            $('#btn_cancel_all_order_condition').prop('disabled', false);
+                        }
+                    }
+                    timoutReloadCondition = setTimeout(() => {
+                        let currentHour = new Date(serverTime).getHours() || new Date().getHours();
+                        if (objOrderPanel.screen === "advance" && currentHour < 15) {
+                            objOrderPanel.showConditionOrderList();
+                        }
+                    }, timeIntervalReload)
+                } else {
+                    console.log(vData);
+                    if (vData.rc == -1 && (vData.rs == "FOException.InvalidSessionException" || vData.rs.includes('NotLoginException'))) {
+                        if (bootboxshow == 0) {
+                            bootboxshow = 1;
+                            if (objPage.timer != null) clearTimeout(objPage.timer);
+                            loginConfirm();
+                        }
+                    } else {
+                        shownotification('Warning', getMessage(vData.rc, vData.rs), 'warning');
+                    }
+                }
+            },
+            error: function (err) {
+
+            }
+        });
+
+    }
+    catch (e) {
+    }
 }
-a.es-button {
-  mso-style-priority:100!important;
-  text-decoration:none!important;
+
+objOrderPanel.showNotiConditionOrder = function (idata, typeMsg) {
+    var price = idata.priceType && idata.priceType !== "LO" ? idata.priceType : idata.placedPrice;
+    if (typeMsg === "matched") {
+        if (!objConfig.NOTICE_ORDER) {
+            var mess = '';
+            mess += '<span>Lệnh điều kiện: ' + orderType + '</span><span> ' + (idata.side == 'S' ? 'SHORT' : 'LONG') + ' </span>';
+            mess += '<span>' + idata.quantity + '<br>HĐ ' + idata.symbol + ' giá ' + price + '<br>đã kích hoạt thành công. </span>';
+            mess += '<br><span>Khối lượng kích hoạt: ' + idata.quantity + '. </span>';
+            mess += '<br><span>Giá đẩy vào sàn: ' + price + '.</span>';
+            var numNotice = StringToInt($('#numNotification').text()) + 1;
+            $('.numNotification').text(numNotice);
+            $('#numNotification').css('display', '');
+            var htmlNoti = '<a class="dropdown-item" href="javascript:void(0)" style="color: #fff; ' + (idata.side == 'S' ? 'background: #f63c3a;' : 'background: #3a9d5d;') + '">' + mess + '</a>';
+            $('.detailNotice').append(htmlNoti);
+        } else {
+            var mess = '';
+            mess += '<span>Lệnh điều kiện: ' + orderType + '</span><span> ' + (idata.side == 'S' ? 'SHORT' : 'LONG') + ' </span>';
+            mess += '<span>' + idata.quantity + ' HĐ ' + idata.symbol + ' giá ' + price + ' đã kích hoạt thành công. </span>';
+            mess += '<br><span>Khối lượng kích hoạt: ' + idata.quantity + '. </span>';
+            mess += '<span>Giá đẩy vào sàn: ' + price + '.</span>';
+            var type = idata.side == 'S' ? 'error' : 'success';
+            shownotification('Infomation', mess, type, 5000);
+        }
+    } else if (typeMsg === "rejected") {
+        if (idata.reason == "-6012" || idata.reason == "COS-96012") {
+            if (!objConfig.NOTICE_CANCEL_ORDER) {
+                var mess = '';
+                mess += '<span>Lệnh điều kiện: ' + orderType + '</span><span> ' + (idata.side == 'S' ? 'SHORT' : 'LONG') + ' </span>';
+                mess += '<span>' + idata.quantity + '<br>HĐ ' + idata.symbol + ' giá ' + price + '<br>chưa được kích hoạt thành công do<br>sức mua không đủ để thực hiện.</span>';
+                if (idata.reason === '-6012' || idata.reason == "COS-96012") {
+                    mess += '<br><span> Quý khách vui lòng nộp tiền hoặc<br>gia tăng sức mua cho tài khoản ' + idata.accountNo + '<br>sau đó thực hiện lại thao tác đặt lệnh.</span>';
+                }
+
+                var numNotice = StringToInt($('#numNotification').text()) + 1;
+                $('.numNotification').text(numNotice);
+                $('#numNotification').css('display', '');
+                var htmlNoti = '<a class="dropdown-item" href="javascript:void(0)" style="color: #fff; ' + (idata.side == 'S' ? 'background: #f63c3a;' : 'background: #3a9d5d;') + '">' + mess + '</a>';
+                $('.detailNotice').append(htmlNoti);
+            } else {
+                var mess = '';
+                mess += '<span>Lệnh điều kiện: ' + orderType + '</span><span> ' + (idata.side == 'S' ? 'SHORT' : 'LONG') + ' </span>';
+                mess += '<span>' + idata.quantity + ' HĐ ' + idata.symbol + ' giá ' + price + ' chưa được kích hoạt thành công do sức mua không đủ để thực hiện</span>';
+                if (idata.reason === '-6012' || idata.reason == "COS-96012") {
+                    mess += '<br><span> Quý khách vui lòng nộp tiền hoặc gia tăng sức mua cho tài khoản ' + idata.accountNo + ' sau đó thực hiện lại thao tác đặt lệnh</span>';
+                }
+
+                var type = idata.side == 'S' ? 'error' : 'success';
+                shownotification('Infomation', mess, type, 5000);
+            }
+        }
+    }
 }
-a[x-apple-data-detectors],
-#MessageViewBody a {
-  color:inherit!important;
-  text-decoration:none!important;
-  font-size:inherit!important;
-  font-family:inherit!important;
-  font-weight:inherit!important;
-  line-height:inherit!important;
+
+objOrderPanel.updateOrderConditionRealtime = function (idata) {
+    var orderType = '';
+    if (idata.stopOrderType == orderListOrderStop) {
+        orderType = 'Stop Order';
+    } else if (idata.stopOrderType == orderListTrailingStop) {
+        orderType = 'Trailing Stop';
+    } else if (idata.stopOrderType == orderListOCO && (idata.subOrderType == orderListSL || idata.subOrderType == orderListTP)) {
+        orderType = 'OCO'
+    } else if (idata.subOrderType == orderListSL) {
+        orderType = 'Stop Loss';
+    } else if (idata.subOrderType == orderListTP) {
+        orderType = 'Take Profit';
+    }
+    var status = getStatusConditionNew(idata.status, idata.orderStatus);
+    if (status == 'Chờ kích hoạt' && idata.stopOrderType == orderListTrailingStop) {
+        $('#pl_price_' + idata.stopOrderID).html('');
+        var relation = idata.relation == "GTEQ" ? ">=" : "<=";
+        var sp = "Giá thị trường " + relation + idata.triggerPrice;
+        $('#sp_condition_' + idata.stopOrderID).html(sp);
+    }
+    if (status == 'Đã kích hoạt') {
+        if ((idata.stopOrderType == orderListSLTP && idata.subOrderType) || idata.stopOrderType != orderListSLTP) {
+            objOrderPanel.showNotiConditionOrder(idata, "matched");
+            // update placed price
+            if (idata.stopOrderType == orderListTrailingStop) {
+                $('#pl_price_' + idata.stopOrderID).html(idata.placedPrice);
+                var relation = idata.relation == "GTEQ" ? ">=" : "<=";
+                var sp = "Giá thị trường " + relation + idata.triggerPrice;
+                $('#sp_condition_' + idata.stopOrderID).html(sp);
+            }
+            //update status
+            if ($('#order_st_' + idata.stopOrderID)) {
+                $('#order_st_' + idata.stopOrderID).html(status);
+            }
+            // update order action (update/cancel)
+            $('#btne_' + idata.stopOrderID).text('');
+            $('#btnu_' + idata.stopOrderID).text('');
+
+            $('#btne_' + idata.stopOrderID).parent().css('display', '');
+
+            //update view detail
+            if (idata.foOrderID) {
+                var html = "<a class='normal normal-order-detail' href='javascript:void(0);' id='btne_child_" + idata.stopOrderID + "' onclick='objOrderPanel.getOrderInfoByPKOrderNo(this, \"" + idata.accountNo + "\", \"" + idata.foPkOrderNo + "\", true);'><em>Xem chi tiết</em></a></td>"
+                $('#order_sub_' + idata.stopOrderID).html(html);
+            }
+        }
+        if (idata.stopOrderType == orderListSLTP && (!idata.subOrderType || idata.subOrderType == 'null')) {
+            if (objOrderPanel.screen === "order") {
+                objOrderPanel.showOrderList();
+            }
+            if ($(".option1-scr").css("visibility") === "visible") {
+                objOrderPanel.showOrderListView2();
+            }
+        }
+
+    } else if (getStatusConditionNew(idata) == 'Từ chối') {
+        objOrderPanel.showNotiConditionOrder(idata, "rejected");
+        // update placed price
+        if (idata.stopOrderType == orderListTrailingStop) {
+            $('#pl_price_' + idata.stopOrderID).html(idata.placedPrice);
+            var relation = idata.relation == "GTEQ" ? ">=" : "<=";
+            var sp = "Giá thị trường " + relation + idata.triggerPrice;
+            $('#sp_condition_' + idata.stopOrderID).html(sp);
+        }
+        var html = '<span class="tooltiptext">' + reason + '</span><i class="fa fa-exclamation-circle" aria-hidden="true">&nbsp</i>' + '<span>' + status + '</span>';
+        if ($('#order_st_' + idata.stopOrderID)) {
+            $('#order_st_' + idata.stopOrderID).addClass('tooltipTableC');
+            $('#order_st_' + idata.stopOrderID).html(html);
+        }
+        // update order action (update/cancel)
+        $('#btne_' + idata.stopOrderID).text('');
+        $('#btnu_' + idata.stopOrderID).text('');
+
+        $('#btne_' + idata.stopOrderID).parent().css('display', '');
+    } else if (getStatusConditionNew(idata) == 'Đã hủy') {
+        if ($('#order_st_' + idata.stopOrderID)) {
+            $('#order_st_' + idata.stopOrderID).html(status);
+        }
+        // update order action (update/cancel)
+        $('#btne_' + idata.stopOrderID).text('');
+        $('#btnu_' + idata.stopOrderID).text('');
+
+        $('#btne_' + idata.stopOrderID).parent().css('display', '');
+    }
 }
-.es-desk-hidden {
-  display:none;
-  float:left;
-  overflow:hidden;
-  width:0;
-  max-height:0;
-  line-height:0;
-  mso-hide:all;
+
+objOrderPanel.updateOrderLVRealtime = function (idata, status, typeMsg) {
+    if (typeMsg !== "matchPending" && !(idata.volume - idata.matchVolume > 0 && typeMsg === "matched")) {
+        $('#vbtnu_' + idata.pk_orderNo).removeAttr('onclick');
+        $('#vbtne_' + idata.pk_orderNo).removeAttr('onclick');
+        $('#vbtnu_' + idata.pk_orderNo).text('');
+        $('#vbtne_' + idata.pk_orderNo).text('');
+    } else if (typeMsg === "matchPending" || (idata.volume - idata.matchVolume > 0 && typeMsg === "matched")) {
+        // dang ky lai event cho button
+        var volumeOrder = typeMsg === "matchPending" ? idata.volume : (idata.matchVolume);
+        const matchedVol = idata.matchVolume;
+        const unmatchVol = idata.volume - idata.matchVolume;
+        var deleteOrderEvent = 'objOrderPanel.deleteOrder("' + idata.orderNo + '","' + idata.side + '","' + idata.group + '_' + idata.orderNo + '","' + idata.symbol + '","' + idata.showPrice + '","' + volumeOrder + '","' + idata.accountCode + '");';
+        $('#vbtne_' + idata.pk_orderNo).attr('onclick', deleteOrderEvent).html('<i class="fa fa-trash-o" aria-hidden="true"></i>');
+
+        var updateOrderEvent = 'objOrderPanel.UpdateOrderNormal("' + idata.orderNo + '","' + idata.side + '","' + idata.symbol + '","' + idata.showPrice + '","' + matchedVol + '","' + unmatchVol + '","' + idata.accountCode + '");';
+
+        $('#vbtnu_' + idata.pk_orderNo).attr('onclick', updateOrderEvent).html('<i class="fa fa-pencil-square-o" aria-hidden="true"></i>');
+        $('#hili2_' + idata.pk_orderNo).html(idata.volume - idata.matchVolume);
+    }
+    $('#opst_' + idata.pk_orderNo).text(status);
+    $('#opsp_' + idata.pk_orderNo).text(idata.showPrice);
+    $('#opvol_' + idata.pk_orderNo).text(idata.volume);
+    try {
+        if (typeMsg === "matched") {
+            var showOrderEvent = 'openOrderInfo("' + idata.orderNo + '","' + idata.pk_orderNo + '");';
+            $('#opma_' + idata.pk_orderNo).html(Highcharts.numberFormat(idata.matchVolume, 0)).attr('onclick', showOrderEvent);
+            if (idata.volume - idata.matchVolume == 0) {
+                $('#hili2_' + idata.pk_orderNo).html('-');
+            } else {
+                $('#hili2_' + idata.pk_orderNo).html(idata.volume - idata.matchVolume);
+            }
+            if (idata.matchVolume == '0') {
+                $('#oppa_' + idata.pk_orderNo).html('-');
+            } else {
+                $('#oppa_' + idata.pk_orderNo).html(Highcharts.numberFormat(idata.matchValue / (idata.matchVolume * 100), 1));
+            }
+        }
+    } catch (err) {
+
+    }
 }
-@media only screen and (max-width:600px) {.es-m-p0r { padding-right:0px!important } .es-m-p20b { padding-bottom:20px!important } .es-m-p5t { padding-top:5px!important } .es-p-default { } *[class="gmail-fix"] { display:none!important } p, a { line-height:150%!important } h1, h1 a { line-height:120%!important } h2, h2 a { line-height:120%!important } h3, h3 a { line-height:120%!important } h4, h4 a { line-height:120%!important } h5, h5 a { line-height:120%!important } h6, h6 a { line-height:120%!important } .es-header-body p { } .es-content-body p { } .es-footer-body p { } .es-infoblock p { } h1 { font-size:36px!important; text-align:left } h2 { font-size:26px!important; text-align:left } h3 { font-size:20px!important; text-align:left } h4 { font-size:24px!important; text-align:left } h5 { font-size:20px!important; text-align:left } h6 { font-size:16px!important; text-align:left } .es-header-body h1 a, .es-content-body h1 a, .es-footer-body h1 a { font-size:36px!important } .es-header-body h2 a, .es-content-body h2 a, .es-footer-body h2 a { font-size:26px!important } .es-header-body h3 a, .es-content-body h3 a, .es-footer-body h3 a { font-size:20px!important } .es-header-body h4 a, .es-content-body h4 a, .es-footer-body h4 a { font-size:24px!important } .es-header-body h5 a, .es-content-body h5 a, .es-footer-body h5 a { font-size:20px!important } .es-header-body h6 a, .es-content-body h6 a, .es-footer-body h6 a { font-size:16px!important } .es-menu td a { font-size:12px!important } .es-header-body p, .es-header-body a { font-size:14px!important } .es-content-body p, .es-content-body a { font-size:14px!important } .es-footer-body p, .es-footer-body a { font-size:14px!important } .es-infoblock p, .es-infoblock a { font-size:12px!important } .es-m-txt-c, .es-m-txt-c h1, .es-m-txt-c h2, .es-m-txt-c h3, .es-m-txt-c h4, .es-m-txt-c h5, .es-m-txt-c h6 { text-align:center!important } .es-m-txt-r, .es-m-txt-r h1, .es-m-txt-r h2, .es-m-txt-r h3, .es-m-txt-r h4, .es-m-txt-r h5, .es-m-txt-r h6 { text-align:right!important } .es-m-txt-j, .es-m-txt-j h1, .es-m-txt-j h2, .es-m-txt-j h3, .es-m-txt-j h4, .es-m-txt-j h5, .es-m-txt-j h6 { text-align:justify!important } .es-m-txt-l, .es-m-txt-l h1, .es-m-txt-l h2, .es-m-txt-l h3, .es-m-txt-l h4, .es-m-txt-l h5, .es-m-txt-l h6 { text-align:left!important } .es-m-txt-r img, .es-m-txt-c img, .es-m-txt-l img { display:inline!important } .es-m-txt-r .rollover:hover .rollover-second, .es-m-txt-c .rollover:hover .rollover-second, .es-m-txt-l .rollover:hover .rollover-second { display:inline!important } .es-m-txt-r .rollover span, .es-m-txt-c .rollover span, .es-m-txt-l .rollover span { line-height:0!important; font-size:0!important; display:block } .es-spacer { display:inline-table } a.es-button, button.es-button { font-size:20px!important; padding:10px 20px 10px 20px!important; line-height:120%!important } a.es-button, button.es-button, .es-button-border { display:inline-block!important } .es-m-fw, .es-m-fw.es-fw, .es-m-fw .es-button { display:block!important } .es-m-il, .es-m-il .es-button, .es-social, .es-social td, .es-menu { display:inline-block!important } .es-adaptive table, .es-left, .es-right { width:100%!important } .es-content table, .es-header table, .es-footer table, .es-content, .es-footer, .es-header { width:100%!important; max-width:600px!important } .adapt-img { width:100%!important; height:auto!important } .es-mobile-hidden, .es-hidden { display:none!important } .es-desk-hidden { width:auto!important; overflow:visible!important; float:none!important; max-height:inherit!important; line-height:inherit!important } tr.es-desk-hidden { display:table-row!important } table.es-desk-hidden { display:table!important } td.es-desk-menu-hidden { display:table-cell!important } .es-menu td { width:1%!important } table.es-table-not-adapt, .esd-block-html table { width:auto!important } .h-auto { height:auto!important } }
-@media screen and (max-width:384px) {.mail-message-content { width:414px!important } }
-</style>
- </head>
- <body class="body" style="width:100%;height:100%;padding:0;Margin:0">
-  <div dir="ltr" class="es-wrapper-color" lang="vi" style="background-color:#FAFAFA"><!--[if gte mso 9]>
-			<v:background xmlns:v="urn:schemas-microsoft-com:vml" fill="t">
-				<v:fill type="tile" color="#fafafa"></v:fill>
-			</v:background>
-		<![endif]-->
-   <table width="100%" cellspacing="0" cellpadding="0" class="es-wrapper" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;padding:0;Margin:0;width:100%;height:100%;background-repeat:repeat;background-position:center top;background-color:#FAFAFA">
-     <tr>
-      <td valign="top" style="padding:0;Margin:0">
-       <table cellpadding="0" cellspacing="0" align="center" class="es-content" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;width:100%;table-layout:fixed !important">
-         <tr>
-          <td align="center" class="es-info-area" style="padding:0;Margin:0">
-           <table align="center" cellpadding="0" cellspacing="0" bgcolor="#FFFFFF" class="es-content-body" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;background-color:transparent;width:600px" role="none">
-             <tr>
-              <td align="left" style="padding:20px;Margin:0">
-               <table cellpadding="0" cellspacing="0" width="100%" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                 <tr>
-                  <td align="center" valign="top" style="padding:0;Margin:0;width:560px">
-                   <table cellpadding="0" cellspacing="0" width="100%" role="presentation" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                     <tr>
-                      <td align="center" class="es-infoblock" style="padding:0;Margin:0"><p style="Margin:0;mso-line-height-rule:exactly;font-family:arial, 'helvetica neue', helvetica, sans-serif;line-height:18px;letter-spacing:0;color:#CCCCCC;font-size:12px"><a target="_blank" href="" style="mso-line-height-rule:exactly;text-decoration:underline;color:#CCCCCC;font-size:12px">View online version</a></p></td>
-                     </tr>
-                   </table></td>
-                 </tr>
-               </table></td>
-             </tr>
-           </table></td>
-         </tr>
-       </table>
-       <table cellpadding="0" cellspacing="0" align="center" class="es-header" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;width:100%;table-layout:fixed !important;background-color:transparent;background-repeat:repeat;background-position:center top">
-         <tr>
-          <td align="center" style="padding:0;Margin:0">
-           <table bgcolor="#ffffff" align="center" cellpadding="0" cellspacing="0" class="es-header-body" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;background-color:transparent;width:600px">
-             <tr>
-              <td align="left" style="Margin:0;padding-top:10px;padding-right:20px;padding-bottom:10px;padding-left:20px">
-               <table cellpadding="0" cellspacing="0" width="100%" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                 <tr>
-                  <td valign="top" align="center" class="es-m-p0r" style="padding:0;Margin:0;width:560px">
-                   <table cellpadding="0" cellspacing="0" width="100%" role="presentation" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                     <tr>
-                      <td align="center" style="padding:0;Margin:0;padding-bottom:20px;font-size:0px"><img src="https://tugthu.stripocdn.email/content/guids/CABINET_887f48b6a2f22ad4fb67bc2a58c0956b/images/93351617889024778.png" alt="Logo" width="200" title="Logo" style="display:block;font-size:12px;border:0;outline:none;text-decoration:none"></td>
-                     </tr>
-                     <tr>
-                      <td style="padding:0;Margin:0">
-                       <table cellpadding="0" cellspacing="0" width="100%" class="es-menu" role="presentation" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                         <tr class="links">
-                          <td align="center" valign="top" width="25%" style="Margin:0;border:0;padding-top:15px;padding-bottom:15px;padding-right:5px;padding-left:5px"><a target="_blank" href="" style="mso-line-height-rule:exactly;text-decoration:none;font-family:arial, 'helvetica neue', helvetica, sans-serif;display:block;color:#666666;font-size:14px">Shop</a></td>
-                          <td align="center" valign="top" width="25%" style="Margin:0;border:0;padding-top:15px;padding-bottom:15px;padding-right:5px;padding-left:5px"><a target="_blank" href="" style="mso-line-height-rule:exactly;text-decoration:none;font-family:arial, 'helvetica neue', helvetica, sans-serif;display:block;color:#666666;font-size:14px">New</a></td>
-                          <td align="center" valign="top" width="25%" style="Margin:0;border:0;padding-top:15px;padding-bottom:15px;padding-right:5px;padding-left:5px"><a target="_blank" href="" style="mso-line-height-rule:exactly;text-decoration:none;font-family:arial, 'helvetica neue', helvetica, sans-serif;display:block;color:#666666;font-size:14px">Sale</a></td>
-                          <td align="center" valign="top" width="25%" style="Margin:0;border:0;padding-top:15px;padding-bottom:15px;padding-right:5px;padding-left:5px"><a target="_blank" href="" style="mso-line-height-rule:exactly;text-decoration:none;font-family:arial, 'helvetica neue', helvetica, sans-serif;display:block;color:#666666;font-size:14px">About</a></td>
-                         </tr>
-                       </table></td>
-                     </tr>
-                   </table></td>
-                 </tr>
-               </table></td>
-             </tr>
-           </table></td>
-         </tr>
-       </table>
-       <table cellpadding="0" cellspacing="0" align="center" class="es-content" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;width:100%;table-layout:fixed !important">
-         <tr>
-          <td align="center" style="padding:0;Margin:0">
-           <table bgcolor="#ffffff" align="center" cellpadding="0" cellspacing="0" class="es-content-body" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;background-color:#FFFFFF;width:600px">
-             <tr>
-              <td align="left" style="Margin:0;padding-right:20px;padding-bottom:10px;padding-left:20px;padding-top:20px">
-               <table cellpadding="0" cellspacing="0" width="100%" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                 <tr>
-                  <td align="center" valign="top" style="padding:0;Margin:0;width:560px">
-                   <table cellpadding="0" cellspacing="0" width="100%" role="presentation" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                     <tr>
-                      <td align="center" style="padding:0;Margin:0;padding-top:10px;padding-bottom:10px;font-size:0px"><img src="https://tugthu.stripocdn.email/content/guids/CABINET_4c999450c5cf7aea2d4019fe6159f3088a02ff80f210b66c8f02a42784986e3d/images/1_baner.jpg" alt="" width="300" class="adapt-img" style="display:block;font-size:14px;border:0;outline:none;text-decoration:none"></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="padding:0;Margin:0;padding-bottom:10px;padding-top:20px"><h1 class="es-m-txt-c" style="Margin:0;font-family:arial, 'helvetica neue', helvetica, sans-serif;mso-line-height-rule:exactly;letter-spacing:0;font-size:46px;font-style:normal;font-weight:bold;line-height:46px;color:#333333"></h1></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="padding:20px;Margin:0;font-size:0">
-                       <table height="100%" cellpadding="0" cellspacing="0" border="0" width="100%" class="es-spacer" role="presentation" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                         <tr>
-                          <td style="padding:0;Margin:0;width:100%;margin:0px;border-bottom:1px solid #cccccc;background:none;height:1px"></td>
-                         </tr>
-                       </table></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="padding:0;Margin:0;padding-top:5px;padding-bottom:5px"><p style="Margin:0;mso-line-height-rule:exactly;font-family:arial, 'helvetica neue', helvetica, sans-serif;line-height:21px;letter-spacing:0;color:#333333;font-size:14px"><b>Công ty Cổ phần Chứng khoán VPS (VPS)</b>&nbsp;xin chân thành cảm ơn Quý khách đã tin tưởng và lựa chọn sử dụng các sản phẩm, dịch vụ của Công ty trong suốt thời gian vừa qua.</p></td>
-                     </tr>
-                   </table></td>
-                 </tr>
-               </table></td>
-             </tr>
-             <tr>
-              <td align="left" style="Margin:0;padding-top:10px;padding-right:20px;padding-bottom:10px;padding-left:20px"><!--[if mso]><table style="width:560px" cellpadding="0" cellspacing="0"><tr><td style="width:125px" valign="top"><![endif]-->
-               <table cellpadding="0" cellspacing="0" align="left" class="es-left" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;float:left">
-                 <tr class="es-mobile-hidden">
-                  <td align="center" valign="top" class="es-m-p20b" style="padding:0;Margin:0;width:105px">
-                   <table cellpadding="0" cellspacing="0" width="100%" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:separate;border-spacing:0px;border-radius:5px" role="presentation">
-                     <tr>
-                      <td align="center" height="40" style="padding:0;Margin:0"></td>
-                     </tr>
-                   </table></td>
-                  <td class="es-hidden" style="padding:0;Margin:0;width:20px"></td>
-                 </tr>
-               </table><!--[if mso]></td><td style="width:310px" valign="top"><![endif]-->
-               <table cellpadding="0" cellspacing="0" align="left" class="es-left" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;float:left">
-                 <tr>
-                  <td align="center" valign="top" class="es-m-p20b" style="padding:0;Margin:0;width:310px">
-                   <table cellpadding="0" cellspacing="0" width="100%" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:separate;border-spacing:0px;border-radius:5px" role="presentation">
-                     <tr>
-                      <td align="center" style="padding:0;Margin:0;padding-right:20px;padding-bottom:10px;padding-left:20px"><h2 class="es-m-txt-c" style="Margin:0;font-family:arial, 'helvetica neue', helvetica, sans-serif;mso-line-height-rule:exactly;letter-spacing:0;font-size:26px;font-style:normal;font-weight:bold;line-height:31.2px;color:#333333">Your promo code</h2></td>
-                     </tr>
-                   </table></td>
-                 </tr>
-                 <tr>
-                  <td align="center" valign="top" class="es-m-p20b" style="padding:0;Margin:0;width:310px">
-                   <table cellpadding="0" cellspacing="0" width="100%" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:separate;border-spacing:0px;border-left:2px dashed #cccccc;border-right:2px dashed #cccccc;border-top:2px dashed #cccccc;border-bottom:2px dashed #cccccc;border-radius:5px" role="presentation">
-                     <tr>
-                      <td align="center" style="Margin:0;padding-top:10px;padding-right:20px;padding-bottom:10px;padding-left:20px"><h1 class="es-m-txt-c" style="Margin:0;font-family:arial, 'helvetica neue', helvetica, sans-serif;mso-line-height-rule:exactly;letter-spacing:0;font-size:40px;font-style:normal;font-weight:bold;line-height:48px;color:#5c68e2"><strong>FGH-123-VBN</strong></h1></td>
-                     </tr>
-                   </table></td>
-                 </tr>
-                 <tr>
-                  <td align="left" style="padding:0;Margin:0;width:310px">
-                   <table cellpadding="0" cellspacing="0" width="100%" role="presentation" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                     <tr>
-                      <td align="center" style="padding:0;Margin:0;padding-top:10px;padding-bottom:10px"><span class="es-button-border" style="border-style:solid;border-color:#2CB543;background:#5C68E2;border-width:0px;display:inline-block;border-radius:6px;width:auto"><a href="" target="_blank" class="es-button es-button-1621617587474" style="mso-style-priority:100 !important;text-decoration:none !important;mso-line-height-rule:exactly;color:#FFFFFF;font-size:20px;padding:15px 40px;display:inline-block;background:#5C68E2;border-radius:6px;font-family:arial, 'helvetica neue', helvetica, sans-serif;font-weight:normal;font-style:normal;line-height:24px;width:auto;text-align:center;letter-spacing:0;mso-padding-alt:0;mso-border-alt:10px solid #5C68E2">START SHOPPING NOW </a></span></td>
-                     </tr>
-                   </table></td>
-                 </tr>
-               </table><!--[if mso]></td><td style="width:20px"></td><td style="width:105px" valign="top"><![endif]-->
-               <table cellpadding="0" cellspacing="0" align="right" class="es-right" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;float:right">
-                 <tr class="es-mobile-hidden">
-                  <td align="left" style="padding:0;Margin:0;width:105px">
-                   <table cellpadding="0" cellspacing="0" width="100%" role="presentation" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                     <tr>
-                      <td align="center" height="40" style="padding:0;Margin:0"></td>
-                     </tr>
-                   </table></td>
-                 </tr>
-               </table><!--[if mso]></td></tr></table><![endif]--></td>
-             </tr>
-             <tr>
-              <td align="left" style="padding:0;Margin:0;padding-right:20px;padding-left:20px;padding-top:20px">
-               <table cellpadding="0" cellspacing="0" width="100%" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                 <tr>
-                  <td align="center" valign="top" style="padding:0;Margin:0;width:560px">
-                   <table cellpadding="0" cellspacing="0" width="100%" role="presentation" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                     <tr>
-                      <td align="center" style="Margin:0;padding-right:20px;padding-left:20px;padding-bottom:5px;padding-top:15px"><h2 class="es-m-txt-c" style="Margin:0;font-family:arial, 'helvetica neue', helvetica, sans-serif;mso-line-height-rule:exactly;letter-spacing:0;font-size:26px;font-style:normal;font-weight:bold;line-height:31.2px;color:#333333">How does&nbsp;it work?</h2></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="Margin:0;padding-right:20px;padding-left:20px;padding-top:5px;padding-bottom:5px"><p style="Margin:0;mso-line-height-rule:exactly;font-family:arial, 'helvetica neue', helvetica, sans-serif;line-height:21px;letter-spacing:0;color:#333333;font-size:14px">How to receive your 25% OFF:</p></td>
-                     </tr>
-                   </table></td>
-                 </tr>
-               </table></td>
-             </tr>
-             <tr>
-              <td align="left" class="esdev-adapt-off" style="padding:0;Margin:0;padding-top:10px;padding-right:20px;padding-left:20px">
-               <table cellpadding="0" cellspacing="0" class="esdev-mso-table" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;width:560px">
-                 <tr>
-                  <td valign="top" class="esdev-mso-td" style="padding:0;Margin:0">
-                   <table cellpadding="0" cellspacing="0" align="left" class="es-left" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;float:left">
-                     <tr>
-                      <td align="center" class="es-m-p0r" style="padding:0;Margin:0;width:45px">
-                       <table cellpadding="0" cellspacing="0" width="100%" role="presentation" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                         <tr>
-                          <td align="center" style="padding:0;Margin:0;font-size:0px"><img src="https://tugthu.stripocdn.email/content/guids/CABINET_887f48b6a2f22ad4fb67bc2a58c0956b/images/2851617878322771.png" alt="" width="35" style="display:block;font-size:14px;border:0;outline:none;text-decoration:none"></td>
-                         </tr>
-                       </table></td>
-                     </tr>
-                   </table></td>
-                  <td style="padding:0;Margin:0;width:20px"></td>
-                  <td valign="top" class="esdev-mso-td" style="padding:0;Margin:0">
-                   <table cellpadding="0" cellspacing="0" align="right" class="es-right" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;float:right">
-                     <tr>
-                      <td align="center" class="es-m-p0r" style="padding:0;Margin:0;width:495px">
-                       <table cellpadding="0" cellspacing="0" width="100%" role="presentation" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                         <tr>
-                          <td align="left" class="es-m-p5t" style="padding:0;Margin:0;padding-top:10px;padding-bottom:10px"><p class="es-m-txt-l" style="Margin:0;mso-line-height-rule:exactly;font-family:arial, 'helvetica neue', helvetica, sans-serif;line-height:21px;letter-spacing:0;color:#333333;font-size:14px">Choose any piece of clothing that you like.</p></td>
-                         </tr>
-                       </table></td>
-                     </tr>
-                   </table></td>
-                 </tr>
-               </table></td>
-             </tr>
-             <tr>
-              <td align="left" class="esdev-adapt-off" style="padding:0;Margin:0;padding-top:10px;padding-right:20px;padding-left:20px">
-               <table cellpadding="0" cellspacing="0" class="esdev-mso-table" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;width:560px">
-                 <tr>
-                  <td valign="top" class="esdev-mso-td" style="padding:0;Margin:0">
-                   <table cellpadding="0" cellspacing="0" align="left" class="es-left" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;float:left">
-                     <tr>
-                      <td align="center" class="es-m-p0r" style="padding:0;Margin:0;width:45px">
-                       <table cellpadding="0" cellspacing="0" width="100%" role="presentation" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                         <tr>
-                          <td align="center" style="padding:0;Margin:0;font-size:0px"><img src="https://tugthu.stripocdn.email/content/guids/CABINET_887f48b6a2f22ad4fb67bc2a58c0956b/images/2851617878322771.png" alt="" width="35" style="display:block;font-size:14px;border:0;outline:none;text-decoration:none"></td>
-                         </tr>
-                       </table></td>
-                     </tr>
-                   </table></td>
-                  <td style="padding:0;Margin:0;width:20px"></td>
-                  <td valign="top" class="esdev-mso-td" style="padding:0;Margin:0">
-                   <table cellpadding="0" cellspacing="0" align="right" class="es-right" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;float:right">
-                     <tr>
-                      <td align="center" class="es-m-p0r" style="padding:0;Margin:0;width:495px">
-                       <table cellpadding="0" cellspacing="0" width="100%" role="presentation" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                         <tr>
-                          <td align="left" class="es-m-p5t" style="padding:0;Margin:0;padding-top:10px;padding-bottom:10px"><p class="es-m-txt-l" style="Margin:0;mso-line-height-rule:exactly;font-family:arial, 'helvetica neue', helvetica, sans-serif;line-height:21px;letter-spacing:0;color:#333333;font-size:14px">At the checkout, redeem your promo code.</p></td>
-                         </tr>
-                       </table></td>
-                     </tr>
-                   </table></td>
-                 </tr>
-               </table></td>
-             </tr>
-             <tr>
-              <td align="left" class="esdev-adapt-off" style="Margin:0;padding-top:10px;padding-right:20px;padding-left:20px;padding-bottom:20px">
-               <table cellpadding="0" cellspacing="0" class="esdev-mso-table" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;width:560px">
-                 <tr>
-                  <td valign="top" class="esdev-mso-td" style="padding:0;Margin:0">
-                   <table cellpadding="0" cellspacing="0" align="left" class="es-left" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;float:left">
-                     <tr>
-                      <td align="center" class="es-m-p0r" style="padding:0;Margin:0;width:45px">
-                       <table cellpadding="0" cellspacing="0" width="100%" role="presentation" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                         <tr>
-                          <td align="center" style="padding:0;Margin:0;font-size:0px"><img src="https://tugthu.stripocdn.email/content/guids/CABINET_887f48b6a2f22ad4fb67bc2a58c0956b/images/2851617878322771.png" alt="" width="35" style="display:block;font-size:14px;border:0;outline:none;text-decoration:none"></td>
-                         </tr>
-                       </table></td>
-                     </tr>
-                   </table></td>
-                  <td style="padding:0;Margin:0;width:20px"></td>
-                  <td valign="top" class="esdev-mso-td" style="padding:0;Margin:0">
-                   <table cellpadding="0" cellspacing="0" align="right" class="es-right" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;float:right">
-                     <tr>
-                      <td align="center" class="es-m-p0r" style="padding:0;Margin:0;width:495px">
-                       <table cellpadding="0" cellspacing="0" width="100%" role="presentation" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                         <tr>
-                          <td align="left" class="es-m-p5t" style="padding:0;Margin:0;padding-top:10px;padding-bottom:10px"><p class="es-m-txt-l" style="Margin:0;mso-line-height-rule:exactly;font-family:arial, 'helvetica neue', helvetica, sans-serif;line-height:21px;letter-spacing:0;color:#333333;font-size:14px">Wait for your order to come. Enjoy!</p></td>
-                         </tr>
-                       </table></td>
-                     </tr>
-                   </table></td>
-                 </tr>
-               </table></td>
-             </tr>
-           </table></td>
-         </tr>
-       </table>
-       <table cellpadding="0" cellspacing="0" align="center" class="es-content" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;width:100%;table-layout:fixed !important">
-         <tr>
-          <td align="center" style="padding:0;Margin:0">
-           <table bgcolor="#ffffff" align="center" cellpadding="0" cellspacing="0" class="es-content-body" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;background-color:#FFFFFF;width:600px">
-             <tr>
-              <td align="left" style="Margin:0;padding-right:20px;padding-bottom:10px;padding-left:20px;padding-top:20px">
-               <table cellpadding="0" cellspacing="0" width="100%" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                 <tr>
-                  <td align="center" valign="top" style="padding:0;Margin:0;width:560px">
-                   <table cellpadding="0" cellspacing="0" width="100%" role="presentation" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                     <tr>
-                      <td align="center" style="Margin:0;padding-right:20px;padding-left:20px;padding-bottom:5px;padding-top:15px"><h2 class="es-m-txt-c" style="Margin:0;font-family:arial, 'helvetica neue', helvetica, sans-serif;mso-line-height-rule:exactly;letter-spacing:0;font-size:26px;font-style:normal;font-weight:bold;line-height:31.2px;color:#333333">You may also like</h2></td>
-                     </tr>
-                   </table></td>
-                 </tr>
-               </table></td>
-             </tr>
-             <tr>
-              <td align="left" style="padding:0;Margin:0;padding-right:20px;padding-left:20px"><!--[if mso]><table style="width:560px" cellpadding="0" cellspacing="0"><tr><td style="width:270px" valign="top"><![endif]-->
-               <table cellpadding="0" cellspacing="0" align="left" class="es-left" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;float:left">
-                 <tr>
-                  <td align="center" valign="top" class="es-m-p20b" style="padding:0;Margin:0;width:270px">
-                   <table cellpadding="0" cellspacing="0" width="100%" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:separate;border-spacing:0px;border-left:1px solid #efefef;border-right:1px solid #efefef;border-top:1px solid #efefef;border-bottom:1px solid #efefef;border-radius:5px" role="presentation">
-                     <tr>
-                      <td align="center" style="padding:0;Margin:0;font-size:0px"><img src="https://tugthu.stripocdn.email/content/guids/CABINET_887f48b6a2f22ad4fb67bc2a58c0956b/images/37161617892813768.png" alt="" height="200" class="adapt-img" style="display:block;font-size:14px;border:0;outline:none;text-decoration:none"></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="padding:0;Margin:0;padding-bottom:5px;padding-right:10px;padding-left:10px"><h3 class="es-m-txt-c" style="Margin:0;font-family:arial, 'helvetica neue', helvetica, sans-serif;mso-line-height-rule:exactly;letter-spacing:0;font-size:20px;font-style:normal;font-weight:bold;line-height:24px;color:#333333">Cotton baseball cap</h3></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="Margin:0;padding-top:5px;padding-bottom:5px;padding-right:10px;padding-left:10px"><p style="Margin:0;mso-line-height-rule:exactly;font-family:arial, 'helvetica neue', helvetica, sans-serif;line-height:18px;letter-spacing:0;color:#333333;font-size:12px">Love baseball and other outdoor games? Then you might want to have this cotton cap.</p></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="Margin:0;padding-top:5px;padding-bottom:5px;padding-right:10px;padding-left:10px"><h2 class="es-m-txt-c" style="Margin:0;font-family:arial, 'helvetica neue', helvetica, sans-serif;mso-line-height-rule:exactly;letter-spacing:0;font-size:26px;font-style:normal;font-weight:bold;line-height:31.2px;color:#333333">$35 <span style="color:#999999"><s style="text-decoration:line-through">$55</s></span></h2></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="Margin:0;padding-top:5px;padding-bottom:5px;padding-right:10px;padding-left:10px"><p style="Margin:0;mso-line-height-rule:exactly;font-family:arial, 'helvetica neue', helvetica, sans-serif;line-height:24px;letter-spacing:0;color:#5c68e2;font-size:16px"><strong>SAVE $20</strong></p></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="padding:0;Margin:0;padding-bottom:20px"><span class="es-button-border" style="border-style:solid;border-color:#5c68e2;background:#ffffff;border-width:2px;display:inline-block;border-radius:5px;width:auto"><a href="" target="_blank" class="es-button" style="mso-style-priority:100 !important;text-decoration:none !important;mso-line-height-rule:exactly;color:#5c68e2;font-size:20px;padding:10px 30px 10px 30px;display:inline-block;background:#ffffff;border-radius:5px;font-family:arial, 'helvetica neue', helvetica, sans-serif;font-weight:normal;font-style:normal;line-height:24px;width:auto;text-align:center;letter-spacing:0;mso-padding-alt:0;mso-border-alt:10px solid #5C68E2;border-color:#ffffff">BUY NOW</a></span></td>
-                     </tr>
-                   </table></td>
-                 </tr>
-               </table><!--[if mso]></td><td style="width:20px"></td><td style="width:270px" valign="top"><![endif]-->
-               <table cellpadding="0" cellspacing="0" align="right" class="es-right" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;float:right">
-                 <tr>
-                  <td align="left" style="padding:0;Margin:0;width:270px">
-                   <table cellpadding="0" cellspacing="0" width="100%" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:separate;border-spacing:0px;border-left:1px solid #efefef;border-right:1px solid #efefef;border-top:1px solid #efefef;border-bottom:1px solid #efefef;border-radius:5px" role="presentation">
-                     <tr>
-                      <td align="center" style="padding:0;Margin:0;font-size:0px"><img src="https://tugthu.stripocdn.email/content/guids/CABINET_887f48b6a2f22ad4fb67bc2a58c0956b/images/8261617892813567.png" alt="" height="200" class="adapt-img" style="display:block;font-size:14px;border:0;outline:none;text-decoration:none"></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="padding:0;Margin:0;padding-bottom:5px;padding-right:10px;padding-left:10px"><h3 class="es-m-txt-c" style="Margin:0;font-family:arial, 'helvetica neue', helvetica, sans-serif;mso-line-height-rule:exactly;letter-spacing:0;font-size:20px;font-style:normal;font-weight:bold;line-height:24px;color:#333333">Polarized sunglasses</h3></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="Margin:0;padding-top:5px;padding-bottom:5px;padding-right:10px;padding-left:10px"><p style="Margin:0;mso-line-height-rule:exactly;font-family:arial, 'helvetica neue', helvetica, sans-serif;line-height:18px;letter-spacing:0;color:#333333;font-size:12px">Love lying in the sun? Then you will definitely need our sunglasses this season.</p></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="Margin:0;padding-top:5px;padding-bottom:5px;padding-right:10px;padding-left:10px"><h2 class="es-m-txt-c" style="Margin:0;font-family:arial, 'helvetica neue', helvetica, sans-serif;mso-line-height-rule:exactly;letter-spacing:0;font-size:26px;font-style:normal;font-weight:bold;line-height:31.2px;color:#333333">$95&nbsp;<span style="color:#999999"><s style="text-decoration:line-through">$155</s></span></h2></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="Margin:0;padding-top:5px;padding-bottom:5px;padding-right:10px;padding-left:10px"><p style="Margin:0;mso-line-height-rule:exactly;font-family:arial, 'helvetica neue', helvetica, sans-serif;line-height:24px;letter-spacing:0;color:#5c68e2;font-size:16px"><strong>SAVE $60</strong></p></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="padding:0;Margin:0;padding-bottom:20px"><span class="es-button-border" style="border-style:solid;border-color:#5c68e2;background:#ffffff;border-width:2px;display:inline-block;border-radius:5px;width:auto"><a href="" target="_blank" class="es-button" style="mso-style-priority:100 !important;text-decoration:none !important;mso-line-height-rule:exactly;color:#5c68e2;font-size:20px;padding:10px 30px 10px 30px;display:inline-block;background:#ffffff;border-radius:5px;font-family:arial, 'helvetica neue', helvetica, sans-serif;font-weight:normal;font-style:normal;line-height:24px;width:auto;text-align:center;letter-spacing:0;mso-padding-alt:0;mso-border-alt:10px solid #5C68E2;border-color:#ffffff">BUY NOW</a></span></td>
-                     </tr>
-                   </table></td>
-                 </tr>
-               </table><!--[if mso]></td></tr></table><![endif]--></td>
-             </tr>
-             <tr>
-              <td align="left" style="padding:20px;Margin:0"><!--[if mso]><table style="width:560px" cellpadding="0" cellspacing="0"><tr><td style="width:270px" valign="top"><![endif]-->
-               <table cellpadding="0" cellspacing="0" align="left" class="es-left" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;float:left">
-                 <tr>
-                  <td align="center" valign="top" class="es-m-p20b" style="padding:0;Margin:0;width:270px">
-                   <table cellpadding="0" cellspacing="0" width="100%" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:separate;border-spacing:0px;border-left:1px solid #efefef;border-right:1px solid #efefef;border-top:1px solid #efefef;border-bottom:1px solid #efefef;border-radius:5px" role="presentation">
-                     <tr>
-                      <td align="center" style="padding:0;Margin:0;font-size:0px"><img src="https://tugthu.stripocdn.email/content/guids/CABINET_887f48b6a2f22ad4fb67bc2a58c0956b/images/77951617892813768.png" alt="" width="200" class="adapt-img" style="display:block;font-size:14px;border:0;outline:none;text-decoration:none"></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="padding:0;Margin:0;padding-bottom:5px;padding-right:10px;padding-left:10px"><h3 class="es-m-txt-c" style="Margin:0;font-family:arial, 'helvetica neue', helvetica, sans-serif;mso-line-height-rule:exactly;letter-spacing:0;font-size:20px;font-style:normal;font-weight:bold;line-height:24px;color:#333333">Black&nbsp;purse</h3></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="Margin:0;padding-top:5px;padding-bottom:5px;padding-right:10px;padding-left:10px"><p style="Margin:0;mso-line-height-rule:exactly;font-family:arial, 'helvetica neue', helvetica, sans-serif;line-height:18px;letter-spacing:0;color:#333333;font-size:12px">What's trendy this year? Black purses that will complement any apparel.</p></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="Margin:0;padding-top:5px;padding-bottom:5px;padding-right:10px;padding-left:10px"><h2 class="es-m-txt-c" style="Margin:0;font-family:arial, 'helvetica neue', helvetica, sans-serif;mso-line-height-rule:exactly;letter-spacing:0;font-size:26px;font-style:normal;font-weight:bold;line-height:31.2px;color:#333333">$95&nbsp;<span style="color:#999999"><s style="text-decoration:line-through">$155</s></span></h2></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="Margin:0;padding-top:5px;padding-bottom:5px;padding-right:10px;padding-left:10px"><p style="Margin:0;mso-line-height-rule:exactly;font-family:arial, 'helvetica neue', helvetica, sans-serif;line-height:24px;letter-spacing:0;color:#5c68e2;font-size:16px"><strong>SAVE&nbsp;$60</strong></p></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="padding:0;Margin:0;padding-bottom:20px"><span class="es-button-border" style="border-style:solid;border-color:#5c68e2;background:#ffffff;border-width:2px;display:inline-block;border-radius:5px;width:auto"><a href="" target="_blank" class="es-button" style="mso-style-priority:100 !important;text-decoration:none !important;mso-line-height-rule:exactly;color:#5c68e2;font-size:20px;padding:10px 30px 10px 30px;display:inline-block;background:#ffffff;border-radius:5px;font-family:arial, 'helvetica neue', helvetica, sans-serif;font-weight:normal;font-style:normal;line-height:24px;width:auto;text-align:center;letter-spacing:0;mso-padding-alt:0;mso-border-alt:10px solid #5C68E2;border-color:#ffffff">BUY NOW</a></span></td>
-                     </tr>
-                   </table></td>
-                 </tr>
-               </table><!--[if mso]></td><td style="width:20px"></td><td style="width:270px" valign="top"><![endif]-->
-               <table cellpadding="0" cellspacing="0" align="right" class="es-right" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;float:right">
-                 <tr>
-                  <td align="left" style="padding:0;Margin:0;width:270px">
-                   <table cellpadding="0" cellspacing="0" width="100%" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:separate;border-spacing:0px;border-left:1px solid #efefef;border-right:1px solid #efefef;border-top:1px solid #efefef;border-bottom:1px solid #efefef;border-radius:5px" role="presentation">
-                     <tr>
-                      <td align="center" style="padding:0;Margin:0;font-size:0px"><img src="https://tugthu.stripocdn.email/content/guids/CABINET_887f48b6a2f22ad4fb67bc2a58c0956b/images/96971617892813782.png" alt="" width="200" class="adapt-img" style="display:block;font-size:14px;border:0;outline:none;text-decoration:none"></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="padding:0;Margin:0;padding-bottom:5px;padding-right:10px;padding-left:10px"><h3 class="es-m-txt-c" style="Margin:0;font-family:arial, 'helvetica neue', helvetica, sans-serif;mso-line-height-rule:exactly;letter-spacing:0;font-size:20px;font-style:normal;font-weight:bold;line-height:24px;color:#333333">Black wallet</h3></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="Margin:0;padding-top:5px;padding-bottom:5px;padding-right:10px;padding-left:10px"><p style="Margin:0;mso-line-height-rule:exactly;font-family:arial, 'helvetica neue', helvetica, sans-serif;line-height:18px;letter-spacing:0;color:#333333;font-size:12px">Thinking about a perfect present for your husband? He'll certainly enjoy this wallet.</p></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="Margin:0;padding-top:5px;padding-bottom:5px;padding-right:10px;padding-left:10px"><h2 class="es-m-txt-c" style="Margin:0;font-family:arial, 'helvetica neue', helvetica, sans-serif;mso-line-height-rule:exactly;letter-spacing:0;font-size:26px;font-style:normal;font-weight:bold;line-height:31.2px;color:#333333">$35 <span style="color:#999999"><s style="text-decoration:line-through">$55</s></span></h2></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="Margin:0;padding-top:5px;padding-bottom:5px;padding-right:10px;padding-left:10px"><p style="Margin:0;mso-line-height-rule:exactly;font-family:arial, 'helvetica neue', helvetica, sans-serif;line-height:24px;letter-spacing:0;color:#5c68e2;font-size:16px"><strong>SAVE $20</strong></p></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="padding:0;Margin:0;padding-bottom:20px"><span class="es-button-border" style="border-style:solid;border-color:#5c68e2;background:#ffffff;border-width:2px;display:inline-block;border-radius:5px;width:auto"><a href="" target="_blank" class="es-button" style="mso-style-priority:100 !important;text-decoration:none !important;mso-line-height-rule:exactly;color:#5c68e2;font-size:20px;padding:10px 30px 10px 30px;display:inline-block;background:#ffffff;border-radius:5px;font-family:arial, 'helvetica neue', helvetica, sans-serif;font-weight:normal;font-style:normal;line-height:24px;width:auto;text-align:center;letter-spacing:0;mso-padding-alt:0;mso-border-alt:10px solid #5C68E2;border-color:#ffffff">BUY NOW</a></span></td>
-                     </tr>
-                   </table></td>
-                 </tr>
-               </table><!--[if mso]></td></tr></table><![endif]--></td>
-             </tr>
-             <tr>
-              <td align="left" style="padding:0;Margin:0;padding-right:20px;padding-left:20px;padding-bottom:20px"><!--[if mso]><table style="width:560px" cellpadding="0" cellspacing="0"><tr><td style="width:145px" valign="top"><![endif]-->
-               <table cellpadding="0" cellspacing="0" align="left" class="es-left" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;float:left">
-                 <tr>
-                  <td align="center" valign="top" class="es-m-p20b" style="padding:0;Margin:0;width:125px">
-                   <table cellpadding="0" cellspacing="0" width="100%" bgcolor="#fafafa" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:separate;border-spacing:0px;background-color:#fafafa;border-radius:5px" role="presentation">
-                     <tr>
-                      <td align="center" style="padding:0;Margin:0;padding-top:15px;padding-right:10px;padding-left:10px;font-size:0px"><img src="https://tugthu.stripocdn.email/content/guids/CABINET_887f48b6a2f22ad4fb67bc2a58c0956b/images/35291617962842974.png" alt="" width="45" style="display:block;font-size:14px;border:0;outline:none;text-decoration:none"></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="Margin:0;padding-top:10px;padding-right:10px;padding-left:10px;padding-bottom:15px"><p style="Margin:0;mso-line-height-rule:exactly;font-family:arial, 'helvetica neue', helvetica, sans-serif;line-height:21px;letter-spacing:0;color:#333333;font-size:14px"><strong><a target="_blank" style="mso-line-height-rule:exactly;text-decoration:none;color:#666666;font-size:14px" href="">T-SHIRTS</a></strong></p></td>
-                     </tr>
-                   </table></td>
-                  <td class="es-hidden" style="padding:0;Margin:0;width:20px"></td>
-                 </tr>
-               </table><!--[if mso]></td><td style="width:145px" valign="top"><![endif]-->
-               <table cellpadding="0" cellspacing="0" align="left" class="es-left" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;float:left">
-                 <tr>
-                  <td align="center" valign="top" class="es-m-p20b" style="padding:0;Margin:0;width:125px">
-                   <table cellpadding="0" cellspacing="0" width="100%" bgcolor="#fafafa" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:separate;border-spacing:0px;background-color:#fafafa;border-radius:5px" role="presentation">
-                     <tr>
-                      <td align="center" style="padding:0;Margin:0;padding-top:15px;padding-right:10px;padding-left:10px;font-size:0px"><img src="https://tugthu.stripocdn.email/content/guids/CABINET_887f48b6a2f22ad4fb67bc2a58c0956b/images/49961617962842933.png" alt="" width="45" style="display:block;font-size:14px;border:0;outline:none;text-decoration:none"></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="Margin:0;padding-top:10px;padding-right:10px;padding-left:10px;padding-bottom:15px"><p style="Margin:0;mso-line-height-rule:exactly;font-family:arial, 'helvetica neue', helvetica, sans-serif;line-height:21px;letter-spacing:0;color:#333333;font-size:14px"><b>HATS</b></p></td>
-                     </tr>
-                   </table></td>
-                  <td class="es-hidden" style="padding:0;Margin:0;width:20px"></td>
-                 </tr>
-               </table><!--[if mso]></td><td style="width:125px" valign="top"><![endif]-->
-               <table cellpadding="0" cellspacing="0" align="left" class="es-left" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;float:left">
-                 <tr>
-                  <td align="center" valign="top" class="es-m-p20b" style="padding:0;Margin:0;width:125px">
-                   <table cellpadding="0" cellspacing="0" width="100%" bgcolor="#fafafa" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:separate;border-spacing:0px;background-color:#fafafa;border-radius:5px" role="presentation">
-                     <tr>
-                      <td align="center" style="padding:0;Margin:0;padding-top:15px;padding-right:10px;padding-left:10px;font-size:0px"><img src="https://tugthu.stripocdn.email/content/guids/CABINET_887f48b6a2f22ad4fb67bc2a58c0956b/images/95681617962842973.png" alt="" width="45" style="display:block;font-size:14px;border:0;outline:none;text-decoration:none"></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="Margin:0;padding-top:10px;padding-right:10px;padding-left:10px;padding-bottom:15px"><p style="Margin:0;mso-line-height-rule:exactly;font-family:arial, 'helvetica neue', helvetica, sans-serif;line-height:21px;letter-spacing:0;color:#333333;font-size:14px"><strong><a target="_blank" style="mso-line-height-rule:exactly;text-decoration:none;color:#666666;font-size:14px" href="">CHILDREN</a></strong></p></td>
-                     </tr>
-                   </table></td>
-                 </tr>
-               </table><!--[if mso]></td><td style="width:20px"></td><td style="width:125px" valign="top"><![endif]-->
-               <table cellpadding="0" cellspacing="0" align="right" class="es-right" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;float:right">
-                 <tr>
-                  <td align="center" valign="top" style="padding:0;Margin:0;width:125px">
-                   <table cellpadding="0" cellspacing="0" width="100%" bgcolor="#fafafa" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:separate;border-spacing:0px;background-color:#fafafa;border-radius:5px" role="presentation">
-                     <tr>
-                      <td align="center" style="padding:0;Margin:0;padding-top:15px;padding-right:10px;padding-left:10px;font-size:0px"><img src="https://tugthu.stripocdn.email/content/guids/CABINET_887f48b6a2f22ad4fb67bc2a58c0956b/images/33371617962842959.png" alt="" width="45" style="display:block;font-size:14px;border:0;outline:none;text-decoration:none"></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="Margin:0;padding-top:10px;padding-right:10px;padding-left:10px;padding-bottom:15px"><p style="Margin:0;mso-line-height-rule:exactly;font-family:arial, 'helvetica neue', helvetica, sans-serif;line-height:21px;letter-spacing:0;color:#333333;font-size:14px"><a target="_blank" style="mso-line-height-rule:exactly;text-decoration:none;color:#666666;font-size:14px" href=""></a><strong><a target="_blank" style="mso-line-height-rule:exactly;text-decoration:none;color:#666666;font-size:14px" href="">FOOTWEAR</a></strong><a target="_blank" style="mso-line-height-rule:exactly;text-decoration:none;color:#666666;font-size:14px" href=""></a></p></td>
-                     </tr>
-                   </table></td>
-                 </tr>
-               </table><!--[if mso]></td></tr></table><![endif]--></td>
-             </tr>
-           </table></td>
-         </tr>
-       </table>
-       <table cellpadding="0" cellspacing="0" align="center" class="es-footer" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;width:100%;table-layout:fixed !important;background-color:transparent;background-repeat:repeat;background-position:center top">
-         <tr>
-          <td align="center" style="padding:0;Margin:0">
-           <table align="center" cellpadding="0" cellspacing="0" class="es-footer-body" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;background-color:transparent;width:640px" role="none">
-             <tr>
-              <td align="left" style="Margin:0;padding-right:20px;padding-left:20px;padding-bottom:20px;padding-top:20px">
-               <table cellpadding="0" cellspacing="0" width="100%" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                 <tr>
-                  <td align="left" style="padding:0;Margin:0;width:600px">
-                   <table cellpadding="0" cellspacing="0" width="100%" role="presentation" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                     <tr>
-                      <td align="center" style="padding:0;Margin:0;padding-top:15px;padding-bottom:15px;font-size:0">
-                       <table cellpadding="0" cellspacing="0" class="es-table-not-adapt es-social" role="presentation" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                         <tr>
-                          <td align="center" valign="top" style="padding:0;Margin:0;padding-right:40px"><img title="Facebook" src="https://tugthu.stripocdn.email/content/assets/img/social-icons/logo-black/facebook-logo-black.png" alt="Fb" width="32" style="display:block;font-size:14px;border:0;outline:none;text-decoration:none"></td>
-                          <td align="center" valign="top" style="padding:0;Margin:0;padding-right:40px"><img title="X" src="https://tugthu.stripocdn.email/content/assets/img/social-icons/logo-black/x-logo-black.png" alt="X" width="32" style="display:block;font-size:14px;border:0;outline:none;text-decoration:none"></td>
-                          <td align="center" valign="top" style="padding:0;Margin:0;padding-right:40px"><img title="Instagram" src="https://tugthu.stripocdn.email/content/assets/img/social-icons/logo-black/instagram-logo-black.png" alt="Inst" width="32" style="display:block;font-size:14px;border:0;outline:none;text-decoration:none"></td>
-                          <td align="center" valign="top" style="padding:0;Margin:0"><img title="Youtube" src="https://tugthu.stripocdn.email/content/assets/img/social-icons/logo-black/youtube-logo-black.png" alt="Yt" width="32" style="display:block;font-size:14px;border:0;outline:none;text-decoration:none"></td>
-                         </tr>
-                       </table></td>
-                     </tr>
-                     <tr>
-                      <td align="center" style="padding:0;Margin:0;padding-bottom:35px"><p style="Margin:0;mso-line-height-rule:exactly;font-family:arial, 'helvetica neue', helvetica, sans-serif;line-height:18px;letter-spacing:0;color:#333333;font-size:12px">Style Casual&nbsp;© 2021 Style Casual, Inc. All Rights Reserved.</p><p style="Margin:0;mso-line-height-rule:exactly;font-family:arial, 'helvetica neue', helvetica, sans-serif;line-height:18px;letter-spacing:0;color:#333333;font-size:12px">4562 Hazy Panda Limits, Chair Crossing, Kentucky, US, 607898</p></td>
-                     </tr>
-                     <tr>
-                      <td style="padding:0;Margin:0">
-                       <table cellpadding="0" cellspacing="0" width="100%" class="es-menu" role="presentation" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                         <tr class="links">
-                          <td align="center" valign="top" width="33.33%" style="Margin:0;border:0;padding-top:5px;padding-bottom:5px;padding-right:5px;padding-left:5px"><a target="_blank" href="" style="mso-line-height-rule:exactly;text-decoration:none;font-family:arial, 'helvetica neue', helvetica, sans-serif;display:block;color:#999999;font-size:12px">Visit Us </a></td>
-                          <td align="center" valign="top" width="33.33%" style="Margin:0;border:0;padding-top:5px;padding-bottom:5px;padding-right:5px;padding-left:5px;border-left:1px solid #cccccc"><a target="_blank" href="" style="mso-line-height-rule:exactly;text-decoration:none;font-family:arial, 'helvetica neue', helvetica, sans-serif;display:block;color:#999999;font-size:12px">Privacy Policy</a></td>
-                          <td align="center" valign="top" width="33.33%" style="Margin:0;border:0;padding-top:5px;padding-bottom:5px;padding-right:5px;padding-left:5px;border-left:1px solid #cccccc"><a target="_blank" href="" style="mso-line-height-rule:exactly;text-decoration:none;font-family:arial, 'helvetica neue', helvetica, sans-serif;display:block;color:#999999;font-size:12px">Terms of Use</a></td>
-                         </tr>
-                       </table></td>
-                     </tr>
-                   </table></td>
-                 </tr>
-               </table></td>
-             </tr>
-           </table></td>
-         </tr>
-       </table>
-       <table cellpadding="0" cellspacing="0" align="center" class="es-content" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;width:100%;table-layout:fixed !important">
-         <tr>
-          <td align="center" class="es-info-area" style="padding:0;Margin:0">
-           <table align="center" cellpadding="0" cellspacing="0" bgcolor="#FFFFFF" class="es-content-body" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px;background-color:transparent;width:600px" role="none">
-             <tr>
-              <td align="left" style="padding:20px;Margin:0">
-               <table cellpadding="0" cellspacing="0" width="100%" role="none" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                 <tr>
-                  <td align="center" valign="top" style="padding:0;Margin:0;width:560px">
-                   <table cellpadding="0" cellspacing="0" width="100%" role="presentation" style="mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;border-spacing:0px">
-                     <tr>
-                      <td align="center" class="es-infoblock" style="padding:0;Margin:0;font-size:0"><img src="https://tugthu.stripocdn.email/content/guids/CABINET_4c999450c5cf7aea2d4019fe6159f3088a02ff80f210b66c8f02a42784986e3d/images/1_baner.jpg" alt="" width="560" class="adapt-img" style="display:block;font-size:14px;border:0;outline:none;text-decoration:none"></td>
-                     </tr>
-                   </table></td>
-                 </tr>
-               </table></td>
-             </tr>
-           </table></td>
-         </tr>
-       </table></td>
-     </tr>
-   </table>
-  </div>
- </body>
-</html>
+
+const loadDanhmucAccountThrottle = _.throttle(function () { objPage.loadDanhmucAccount(false); }, throttleTime, { 'leading': true, 'trailing': true });
+
+objOrderPanel.updateRowOrderRealtime = function (idata, statusOrder, typeMsg, isUpdate = false) {
+
+    let oldVersion = $('#no_' + idata.pk_orderNo).attr('attr-version');
+    const pkNo = idata.pk_orderNo;
+    const $row = $('#no_' + pkNo);
+
+    const maxPkOrder = Math.max(...Array.from(keyOrder).map(item => item.pkOrder || 0));
+    console.log(idata.pk_orderNo, idata, "?.version", "maxPkOrder", maxPkOrder)
+    // 2. So sánh với idata.pk_orderNo
+    if (maxPkOrder < idata.pk_orderNo && idata?.version == "1" && idata?.type == "I" && page == 1) {
+        console.log("Max trong danh sách lớn hơn pk_orderNo hiện tại");
+        objOrderPanel.insertNewRow(idata);
+        if (keyOrder.size > 20) {
+            keyOrder = new Set([...keyOrder].slice(0, 20));
+        }
+        return
+    }
+    if (isUpdate) {
+        console.log(idata.pk_orderNo, "found idata.pk_orderNo")
+    }
+    if ($row.length == 0 && !isUpdate && idata?.version != "1" && idata?.type != "I" && page != 1) {
+        idata.statusOrder = statusOrder;
+        idata.typeMsg = typeMsg;
+        orderQueueMissingData.push(idata);
+        // debugger
+        return; // Thoát sớm, không xử lý DOM phía dưới
+    }
+
+    // else if (maxPkOrder === idata.pk_orderNo) {
+    // 	console.log("Hai giá trị bằng nhau");
+    // } else {
+    // 	console.log("pk_orderNo hiện tại là lớn nhất");
+    // }
+
+    const found = Array.from(keyOrder).find(item => item.pkOrder == idata.pk_orderNo);
+
+    if (idata.version < found?.version) {
+        return;
+    }
+    if ($row.length == 0 && !isUpdate) {
+        const object = { pkOrder: idata.pk_orderNo, version: idata.version }
+        keyOrder = new Set([object, ...keyOrder]);
+    } else if (found) {
+        // Cập nhật version mới nhất trong keyOrder
+        found.version = idata.version;
+    }
+    $('#no_' + idata.pk_orderNo).attr('attr-version', idata.version);
+    if (typeMsg !== "matchPending" && !(idata.volume - idata.matchVolume > 0 && typeMsg === "matched")) {
+        $('#btne_' + idata.pk_orderNo).text('');
+        $('#btnu_' + idata.pk_orderNo).text('');
+        $('#btnu_' + idata.pk_orderNo).removeAttr('onclick');
+        $('#btne_' + idata.pk_orderNo).removeAttr('onclick');
+    } else if (typeMsg === "matchPending" || (idata.volume - idata.matchVolume > 0 && typeMsg === "matched")) {
+        // dang ky lai event cho button
+        const matchedVol = idata.matchVolume;
+        const unmatchVol = idata.volume - idata.matchVolume;
+        var volumeOrder = typeMsg === "matchPending" ? idata.volume : (idata.volume - idata.matchVolume);
+        var deleteOrderEvent = 'objOrderPanel.deleteOrder("' + idata.orderNo + '","' + idata.side + '","' + idata.group + '_' + idata.orderNo + '","' + idata.symbol + '","' + idata.showPrice + '","' + volumeOrder + '","' + idata.accountCode + '");';
+        $('#btne_' + idata.pk_orderNo).attr('onclick', deleteOrderEvent).html(btnCancel);
+
+        var updateOrderEvent = 'objOrderPanel.UpdateOrderNormal("' + idata.orderNo + '","' + idata.side + '","' + idata.symbol + '","' + idata.showPrice + '","' + matchedVol + '","' + unmatchVol + '","' + idata.accountCode + '");';
+
+        $('#btnu_' + idata.pk_orderNo).attr('onclick', updateOrderEvent).html(btnEdit);
+    }
+    $('#st_' + idata.pk_orderNo).text(statusOrder);
+    $('#sp_' + idata.pk_orderNo).text(idata.showPrice);
+    $('#vol_' + idata.pk_orderNo).text(idata.volume);
+    if (typeMsg === "matched") {
+        $('#ma_' + idata.pk_orderNo).html(idata.matchVolume);
+        $('#sp_' + idata.pk_orderNo).html(idata.showPrice);
+        $('#avgp_' + idata.pk_orderNo).html(idata.matchAvgPrice);
+        var showOrderEvent = 'openOrderInfo("' + idata.orderNo + '","' + idata.pk_orderNo + '");';
+        $('#ma_' + idata.pk_orderNo).html(Highcharts.numberFormat(idata.matchVolume, 0)).attr('onclick', showOrderEvent);
+        loadDanhmucAccountThrottle();
+    } else if (typeMsg === "canceled") {
+        $('#ct_' + idata.pk_orderNo).html(idata.cancelTime);
+    }
+
+}
+
+objOrderPanel.updateRowOrderRealtimeDataMissing = function () {
+    console.log(orderQueueMissingData, "found idata.pk_orderNo orderQueueMissingData")
+    debugger
+    while (orderQueueMissingData.length > 0) {
+        const data = orderQueueMissingData.shift();
+        // Thực hiện update
+        objOrderPanel.updateRowOrderRealtime(data, data.statusOrder, data.typeMsg, true);
+    }
+}
+
+objOrderPanel.showNotiRealtime = function (typeMsg, idata) {
+    let mess = "";
+    if (typeMsg === "matched") {
+        if (!objConfig.USE_NOTICE) {
+            mess += '<span style="display: flex; justify-content: space-between;"><span>SHL: <b>' + idata.orderNo + '</b></span><span>Loại: <b>' + (idata.side == 'S' ? 'SHORT' : 'LONG') + '</b></span></span>';
+            mess += '<span style="display: flex; justify-content: space-between;"><b>' + idata.symbol + '</b><b>' + idata.showPrice + '</b><b>(' + idata.matchVolume + '/' + idata.volume + ')</b></span>';
+            var numNotice = StringToInt($('#numNotification').text()) + 1;
+            $('.numNotification').text(numNotice);
+            $('#numNotification').css('display', '');
+            var htmlNoti = '<a class="dropdown-item" href="javascript:void(0)" style="color: #fff; ' + (idata.side == 'S' ? 'background: #f63c3a;' : 'background: #3a9d5d;') + '">' + mess + '</a>';
+            $('.detailNotice').append(htmlNoti);
+        } else {
+            mess += ' Số hiệu lệnh <b>' + idata.orderNo + '</b> đã khớp';
+            mess += '<br>Loại lệnh: <b>' + (idata.side == 'S' ? 'SHORT' : 'LONG') + '</b>';
+            mess += '<br>Khối lượng khớp: <b>' + idata.matchVolume + '/' + idata.volume + '</b>';
+            var type = idata.side == 'S' ? 'error' : 'success';
+            shownotification('Infomation', mess, type);
+        }
+    } else if (typeMsg === "canceled") {
+        if (!objConfig.NOTICE_CANCEL_ORDER) {
+            mess += '<span style="display: flex; justify-content: space-between;"><span>SHL: <b>' + idata.orderNo + '</b></span><span>Loại: <b>' + (idata.side == 'S' ? 'SHORT' : 'LONG') + '</b></span></span>';
+            mess += '<span style="display: flex; justify-content: space-between;">Đã hủy</span>';
+            var numNotice = StringToInt($('#numNotification').text()) + 1;
+            $('.numNotification').text(numNotice);
+            $('#numNotification').css('display', '');
+            var htmlNoti = '<a class="dropdown-item" href="javascript:void(0)" style="color: #fff; ' + (idata.side == 'S' ? 'background: #f63c3a;' : 'background: #3a9d5d;') + '">' + mess + '</a>';
+            $('.detailNotice').append(htmlNoti);
+        } else {
+            mess += ' Số hiệu lệnh <b>' + idata.orderNo + '</b> đã hủy';
+            mess += '<br>Loại lệnh: <b>' + (idata.side == 'S' ? 'SHORT' : 'LONG') + '</b>';
+            var type = idata.side == 'S' ? 'error' : 'success';
+            shownotification('Infomation', mess, type);
+        }
+    }
+}
+
+objOrderPanel.updatePosByDeal = function (symbol, pos_by_deal, version) {
+    let oldVersion = $(`#status-danhmuc-content .danhmuc_${symbol}`).attr('attr-version');
+    debugger
+    if (oldVersion <= version) {
+        $(`#status-danhmuc-content .danhmuc_${symbol} .pos_by_deal`).html(pos_by_deal);
+    }
+}
+
+objOrderPanel.updateOrder = function (idata) {
+
+    if (idata.msg_type == 'AS') {
+        // tài khoản
+        $("#assetsAccInfo").html(Highcharts.numberFormat(idata.assets, 0));
+        $("#vmAccInfo").html(Highcharts.numberFormat(idata.vm, 0));
+        $("#othersAccInfo").html(Highcharts.numberFormat(idata.others, 0));
+        $("#unrelizeVMAccInfo").html(Highcharts.numberFormat(idata.unrelizeVM, 0));
+    } else {
+        // type order
+        let status = idata.statusCode ? getStatusByStatusCode(idata) : fnGetOrderStatusCode(idata);
+        var filter = $('input[name=statusFilter]:checked').val();
+        var filterLV = $('input[name=opstatusFilter]:checked').val();
+        const statusText = idata.statusCode ? getStatusByStatusCode(idata) : fnGetOrderStatusCode(idata);
+        switch (statusText) {
+            case "Đã khớp":
+            case matchOnePart:
+                objOrderPanel.showNotiRealtime("matched", idata);
+                // filter all
+                objOrderPanel.updateRowOrderRealtime(idata, status, "matched");
+                if ($(".option1-scr").css("visibility") === "visible") {
+                    if (!filterLV && $('#opno_' + idata.pk_orderNo).length > 0) { // listview2 filter all
+                        objOrderPanel.updateOrderLVRealtime(idata, status, "matched");
+                    } else if (new Date().getTime() - tickerTimeLV > timeRateLimitReloadOrderBook) {
+                        objOrderPanel.showOrderListView2();
+                    }
+                }
+                break;
+            case "Đã hủy":
+            case matchOneCancel:
+                objOrderPanel.showNotiRealtime("canceled", idata);
+                // filter all
+                objOrderPanel.updateRowOrderRealtime(idata, status, "canceled");
+                if ($(".option1-scr").css("visibility") === "visible") {
+                    if (!filterLV && $('#opno_' + idata.pk_orderNo).length > 0) { // listview2 filter all
+                        objOrderPanel.updateOrderLVRealtime(idata, status, "canceled");
+                    } else if (new Date().getTime() - tickerTimeLV > timeRateLimitReloadOrderBook) {
+                        objOrderPanel.showOrderListView2();
+                    }
+                }
+                break;
+            case "Đã sửa":
+            case "Chờ xử lý":
+            case "Chờ hủy":
+            case "Chờ sửa":
+            case "Đã hủy 1 phần":
+            case "Chờ khớp":
+                // filter all
+                const updateType = statusText === "Chờ khớp" ? "matchPending" : '';
+                objOrderPanel.updateRowOrderRealtime(idata, status, updateType);
+                if ($(".option1-scr").css("visibility") === "visible") {
+                    if (!filterLV && $('#opno_' + idata.pk_orderNo).length > 0) { // listview2 filter all
+                        objOrderPanel.updateOrderLVRealtime(idata, status, updateType);
+                    } else if (new Date().getTime() - tickerTimeLV > timeRateLimitReloadOrderBook) {
+                        objOrderPanel.showOrderListView2();
+                    }
+                }
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+objOrderPanel.otherEvent = function (idata) {
+    var st = idata.statusCode ? getStatusByStatusCode(idata) : fnGetOrderStatusCode(idata);
+    var Volumer = '';
+    Volumer = st === "Chờ khớp" ? idata.volume : idata.volume - idata.matchVolume;
+    if (idata.matchVolume == '0') {
+        $('#ma_' + idata.pk_orderNo).html('-').removeAttr('onclick');
+        $('#opma_' + idata.pk_orderNo).html('-').removeAttr('onclick');
+    }
+    else {
+        var showOrderEvent = 'openOrderInfo("' + idata.orderNo + '","' + idata.pk_orderNo + '");';
+        $('#ma_' + idata.pk_orderNo).html(Highcharts.numberFormat(idata.matchVolume, 0)).attr('onclick', showOrderEvent);
+        $('#opma_' + idata.pk_orderNo).html(Highcharts.numberFormat(idata.matchVolume, 0)).attr('onclick', showOrderEvent);
+        // $('#ma_' + idata.pk_orderNo).attr('onclick', showOrderEvent);
+        // $('#opma_' + idata.pk_orderNo).attr('onclick', showOrderEvent);
+    }
+    $('#st_' + idata.pk_orderNo).html(st);
+
+    $('#avgp_' + idata.pk_orderNo).html(idata.matchAvgPrice);
+
+    if (idata.volume - idata.matchVolume == 0) {
+        $('#hili2_' + idata.pk_orderNo).html('-');
+    } else {
+        $('#hili2_' + idata.pk_orderNo).html(idata.volume - idata.matchVolume);
+    }
+
+    $('#no_' + idata.pk_orderNo).html(idata.orderNo);
+
+    if (window.location.toString().includes('#LiveBoard/1')) {
+        $('#opst_' + idata.pk_orderNo).html(getStatusOP(idata.status));
+    } else {
+        $('#opst_' + idata.pk_orderNo).html(st);
+    }
+
+    $('#opno_' + idata.pk_orderNo).html(idata.orderNo);
+
+    if ((idata.msg_type == '2C') || (idata.matchVolume == idata.volume) || (idata.msg_type == '1C') || (idata.status.indexOf('R') >= 0) || (idata.status.indexOf('X') >= 0)) {
+        $('#btne_' + idata.pk_orderNo).removeAttr('onclick').text('');
+        $('#btnu_' + idata.pk_orderNo).removeAttr('onclick').text('');
+        $('#vbtne_' + idata.pk_orderNo).removeAttr('onclick').text('');
+        $('#vbtnu_' + idata.pk_orderNo).removeAttr('onclick').text('');
+        $('#opbtne_' + idata.pk_orderNo).removeAttr('onclick').text('');
+    }
+
+    if ((idata.orderNo > 0) && (idata.status.indexOf('X') < 0) && st != 'Đã khớp') {
+        // dang ky lai event huy cho button
+        const matchedVol = idata.matchVolume;
+        const unmatchVol = idata.volume - idata.matchVolume;
+        var deleteOrderEvent = 'objOrderPanel.deleteOrder("' + idata.orderNo + '","' + idata.side + '","' + idata.group + '_' + idata.orderNo + '","' + idata.symbol + '","' + idata.showPrice + '","' + idata.volume + '","' + idata.accountCode + '");';
+        $('#btne_' + idata.pk_orderNo).attr('onclick', deleteOrderEvent).html('<i class="fa fa-trash-o" aria-hidden="true"></i>');
+        $('#vbtne_' + idata.pk_orderNo).attr('onclick', deleteOrderEvent).html('<i class="fa fa-trash-o" aria-hidden="true"></i>');
+        $('#opbtne_' + idata.pk_orderNo).attr('onclick', deleteOrderEvent).html('<img src="Common/img/orderstatus/delete.png">');
+
+        var updateOrderEvent = 'objOrderPanel.UpdateOrderNormal("' + idata.orderNo + '","' + idata.side + '","' + idata.symbol + '","' + idata.showPrice + '","' + matchedVol + '","' + '","' + unmatchVol + '","' + idata.accountCode + '");';
+        var updateOrderView = 'objOrderPanel.UpdateOrderView(this);';
+
+        $('#btnu_' + idata.pk_orderNo).attr('onclick', updateOrderEvent).html('<i class="fa fa-pencil-square-o" aria-hidden="true"></i>');
+        $('#vbtnu_' + idata.pk_orderNo).attr('onclick', updateOrderView).html('<i class="fa fa-pencil-square-o" aria-hidden="true"></i>');
+    }
+
+}
+
+objOrderPanel.orderClear = function () {
+    var row = '';
+    if (objOrderPanel.create == 0) {
+        for (i = 0; i < objOrderPanel.numberRow; i++) {
+            row = row + '<tr style="height: 28px;"><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>';
+        }
+        objOrderPanel.create = 1;
+        $('#tbodyContent').html(row);
+    }
+    else {
+        for (i = 0; i < objOrderPanel.numberRow; i++) {
+            row = '<tr style="height: 28px;"><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>';
+            $('#tbodyContent tr:last').remove();
+            $('#tbodyContent').prepend(row);
+        }
+    }
+}
+
+objOrderPanel.orderConditionClear = function () {
+    var row = '';
+    if (objOrderPanel.create == 0) {
+        for (i = 0; i < objOrderPanel.numberRow; i++) {
+            row = row + '<tr style="height: 28px;"><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>';
+        }
+        objOrderPanel.create = 1;
+        $('#tbodyContentCondition').html(row);
+    }
+    else {
+        for (i = 0; i < objOrderPanel.numberRow; i++) {
+            row = '<tr style="height: 28px;"><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>';
+            $('#tbodyContentCondition tr:last').remove();
+            $('#tbodyContentCondition').prepend(row);
+        }
+    }
+}
+
+objOrderPanel.insertNewRow = function (idata, i, callback) {
+    // {"orderNo":"3472","pk_orderNo":"2216404","orderTime":"14:20:58","accountCode":"0343198","side":"S","symbol":"VN30F1807","volume":"2","showPrice":"967.0","matchVolume":"2","status":"PM","channel":"I","group":"FU","cancelTime":"","info":"","maxPrice":"0","matchValue":"193520","quote":"Y"}
+    // co roi thi thoi
+
+    // let oldVersion =  $('#no_' + idata.pk_orderNo).attr('attr-version');
+    // console.log("length", $('#no_' + idata.pk_orderNo).length, "idata.version=", idata.version , "oldVersion=", oldVersion, "idata.version < oldVersion", "$('#no_' + idata.pk_orderNo).length > 0 && idata.version < oldVersion", $('#no_' + idata.pk_orderNo).length > 0 && idata.version < oldVersion)
+    // $('#no_' + idata.pk_orderNo).attr('attr-version', idata.version);
+    const found = Array.from(keyOrder).find(item => item.pkOrder == idata.pk_orderNo);
+    console.log(keyOrder, "found", found?.version, "found?.version")
+    if ($('#no_' + idata.pk_orderNo).length > 0 || found) {
+        objOrderPanel.updateMax(idata.pk_orderNo);
+        if (idata.version >= found?.version) {
+            // Cập nhật version mới nhất trong keyOrder
+            if (found) {
+                found.version = idata.version;
+            }
+            // const statusText = idata.statusCode ? getStatusByStatusCode(idata) : fnGetOrderStatusCode(idata);
+            const statusText = getStatusByStatusCode(idata);
+            let type = "";
+            switch (statusText) {
+                case "Đã khớp":
+                case matchOnePart:
+                    type = "matched";
+                    break;
+                case "Đã hủy":
+                case matchOneCancel:
+                    type = "canceled";
+                    break;
+                case "Đã sửa":
+                case "Chờ xử lý":
+                case "Chờ hủy":
+                case "Chờ sửa":
+                case "Đã hủy 1 phần":
+                case "Chờ khớp":
+                    const updateType = statusText === "Chờ khớp" ? "matchPending" : '';
+                    type = updateType;
+                    break;
+                default:
+                    break;
+            }
+            idata.matchAvgPrice = idata.avgPrice;
+            objOrderPanel.updateRowOrderRealtime(idata, statusText, type);
+            return;
+        }
+        return;
+    }
+
+    // alert(1)
+    // else if ($('#no_' + idata.pk_orderNo).length > 0 && idata.version >= oldVersion) {
+    // 	$('#no_' + idata.pk_orderNo).fadeOut(300, function() { 
+    // 		$(this).remove(); 
+    // 	});
+    // 	return
+    // }
+
+    // if (keyOrder.has(idata.pk_orderNo)) {
+    // 	return;
+    // }
+    const object = { pkOrder: idata.pk_orderNo, version: idata.version }
+    keyOrder = new Set([object, ...keyOrder]);
+    console.log(keyOrder, "addkeyOrder");
+    idata.editOrderHidden = editOrderHidden;
+    idata.btnEdit = btnEdit;
+    idata.btnCancel = btnCancel;
+    if (window.worker) {
+        // console.log('updateOrderPanel', idata);
+        window.worker.postMessage({ data: idata, action: 'updateOrderPanel' });
+    } else {
+        console.error("Chưa khởi tạo worker !");
+    }
+    $('#no_' + idata.pk_orderNo).attr('attr-version', idata.version);
+}
+
+// function xử lý khi có phản hồi của Worker
+let timeoutOrderMissing = null;
+objOrderPanel.WK_UpdateOrderPanel = function (res) {
+    // console.log(res, 'e.data');
+    // Chèn đúng vị trí theo pk_orderNo giảm dần (mới nhất trên cùng)
+    const newPk = parseInt(res.pk_orderNo) || 0;
+    const $newRow = $(res.data);
+    let inserted = false;
+
+    $('#tbodyContent tr').each(function () {
+        const $this = $(this);
+        // Lấy pk_orderNo từ element có id bắt đầu bằng "no_"
+        const rowPkId = $this.find('[id^="no_"]').attr('id');
+        if (rowPkId) {
+            const rowPk = parseInt(rowPkId.replace('no_', '')) || 0;
+            if (newPk > rowPk) {
+                // Chèn trước row có pk nhỏ hơn
+                $this.before($newRow);
+                inserted = true;
+                return false; // break $.each
+            }
+        }
+    });
+
+    if (!inserted) {
+        // pk nhỏ nhất hoặc bảng trống → append cuối
+        $('#tbodyContent').append($newRow);
+    }
+
+    objOrderPanel.updateMax(res.pk_orderNo);
+    let rows = $('#tbodyContent tr');
+    if (rows.length > 6) {
+        rows.slice(6).remove();
+    }
+    if (keyOrder.size > 20) {
+        keyOrder = new Set([...keyOrder].slice(0, 20));
+    }
+    if (orderQueueMissingData.length > 0) {
+        // Xóa timer cũ nếu nó đang tồn tại (clearTimeout)
+        if (timeoutOrderMissing) {
+            clearTimeout(timeoutOrderMissing);
+        }
+
+        // Thiết lập timer mới (setTimeout)
+        // Ví dụ trì hoãn 500ms trước khi thực thi hàm cập nhật
+        timeoutOrderMissing = setTimeout(() => {
+            objOrderPanel.updateRowOrderRealtimeDataMissing();
+
+            // Sau khi chạy xong có thể xóa ID để reset trạng thái
+            timeoutOrderMissing = null;
+        }, 200);
+    }
+    // console.log(res.pk_orderNo, "res.pk_orderNo")
+}
+
+objOrderPanel.insertNewRowOption1 = function (idata) {
+    // {"orderNo":"3472","pk_orderNo":"2216404","orderTime":"14:20:58","accountCode":"0343198","side":"S","symbol":"VN30F1807","volume":"2","showPrice":"967.0","matchVolume":"2","status":"PM","channel":"I","group":"FU","cancelTime":"","info":"","maxPrice":"0","matchValue":"193520","quote":"Y"}
+    if ($('#opno_' + idata.pk_orderNo).length > 0) {
+        return;
+    }
+
+    var row = '';
+
+    row += '	<td class="text-center" style="background: #353C4C; color: #BFD2F0;">' + idata.orderTime + '</td>';
+    row += '	<td class="txt_right text-center" id="opno_' + idata.pk_orderNo + '">' + idata.orderNo + '</td>';
+    // ma chung khoan
+    row += '	<td class="text-center">' + idata.symbol + '</td>';
+
+    var Volumer = '';
+    Volumer = fnGetOrderStatusCode(idata) === "Chờ khớp" ? idata.volume : idata.volume - idata.matchVolume;
+
+    if (idata.group == 'FU') {
+        if (idata.side == 'B') {
+            row += '	<td class="text-center bg-green">Buy</td>';
+        }
+        else {
+            row += '	<td class="text-center bg-red">Sell</td>';
+        }
+    }
+    // gia dat
+    row += '	<td class="txt_right" id="opsp_' + idata.pk_orderNo + '">' + idata.showPrice + '</td>';
+    // giá trung bình
+    if (idata.matchVolume == '0') {
+        row += '	<td class="txt_right" id="oppa_' + idata.pk_orderNo + '">-</td>';
+    } else {
+        row += '	<td class="txt_right" id="oppa_' + idata.pk_orderNo + '">' + Highcharts.numberFormat(idata.matchValue / (idata.matchVolume * 100), 1) + '</td>';
+    }
+    // khoi luong dat
+    row += '	<td class="text-center" id="opvol_' + idata.pk_orderNo + '">' + idata.volume + '</td>';
+    // khoi luong khop
+    if (idata.matchVolume == '0') {
+        row += '	<td class="txt_right" id="opma_' + idata.pk_orderNo + '">-</td>';
+    }
+    else {
+        row += '	<td class="txt_right" id="opma_' + idata.pk_orderNo + '">' + idata.matchVolume + '</td>';
+    }
+    // chua khop
+    if (idata.volume - idata.matchVolume == 0) {
+        row += '	<td class="bg-gray text-center">-</td>';
+    } else {
+        row += '	<td class="bg-gray text-center">' + (idata.volume - idata.matchVolume) + '</td>';
+    }
+
+    // trang thai
+    row += '	<td id="opst_' + idata.pk_orderNo + '" class="text-center">' + getStatusOP(idata.status) + '</td>';
+    // lenh da huy, cho huy, da khop, bi tu choi
+    if ((idata.status.indexOf('X') > 0) || idata.status_code === "4" || idata.status_code === "2" ||
+        (Number(idata.matchVolume) >= Number(idata.volume)) || (idata.status.indexOf('R') > 0) ||
+        idata.showPrice === "MOK" || idata.showPrice === "MAK") {
+        row += '	<td class="text-center" style="background: #000;"><span href="javascript:void(0);" id="opbtnd_' + idata.pk_orderNo + '"></span></td>';
+    }
+    else {
+        if (editOrderHidden) {
+            row += '	<td class="text-center" style="background: #000;"></td>';
+        } else {
+            if (idata.orderNo > 0 && idata.showPrice === "ATO" || idata.showPrice === "ATC") {
+                row += '<td style="display: flex; justify-content: space-around; background: #000;">\
+					<a href="javascript:void(0);" style="color: #fff;" id="vbtne_' + idata.pk_orderNo + '" onclick="objOrderPanel.deleteOrder(\'' + idata.orderNo + '\',\'' + idata.side + '\',\'' + idata.group + '_' + idata.orderNo + '\',\'' + idata.symbol + '\',\'' + idata.showPrice + '\',\'' + idata.volume + '\',\'' + idata.accountCode + '\');">\
+					<i class="fa fa-trash-o" aria-hidden="true"></i></a></td>';
+            } else if (idata.orderNo > 0) {
+                row += '	<td style="display: flex; justify-content: space-around;">\
+					<a href="javascript:void(0);" id="btnu_' + idata.pk_orderNo + '" onclick="objOrderPanel.UpdateOrderNormal(\'' + idata.orderNo + '\',\'' + idata.side + '\',\'' + idata.symbol + '\',\'' + idata.showPrice + '\',\'' + Volumer + '\',\'' + idata.accountCode + '\')"><i class="fa fa-pencil-square-o" aria-hidden="true"></i></a>\
+					<a href="javascript:void(0);" id="btne_' + idata.pk_orderNo + '" onclick="objOrderPanel.deleteOrder(\'' + idata.orderNo + '\',\'' + idata.side + '\',\'' + idata.group + '_' + idata.orderNo + '\',\'' + idata.symbol + '\',\'' + idata.showPrice + '\',\'' + idata.volume + '\',\'' + idata.accountCode + '\');">\
+					<i class="fa fa-trash-o" aria-hidden="true"></i></a></td>';
+            } else {
+                row += '<td class="text-center" style="background: #000;"><span class="text-center cancel disable" id="opbtne_' + idata.pk_orderNo + '">Sửa</span></td>';
+            }
+
+        }
+    }
+    $('#op-order-status').prepend('<tr>' + row + '</tr>');
+}
+
+objOrderPanel.insertNewRowView2 = function (idata) {
+    // {"orderNo":"3472","pk_orderNo":"2216404","orderTime":"14:20:58","accountCode":"0343198","side":"S","symbol":"VN30F1807","volume":"2","showPrice":"967.0","matchVolume":"2","status":"PM","channel":"I","group":"FU","cancelTime":"","info":"","maxPrice":"0","matchValue":"193520","quote":"Y"}
+    if ($('#opno_' + idata.pk_orderNo).length > 0) {
+        return;
+    }
+
+    if (keyMainOrder.has(idata.pk_orderNo)) {
+        return;
+    }
+    keyMainOrder.add(idata.pk_orderNo);
+
+    idata.editOrderHidden = editOrderHidden;
+    idata.btnEdit = btnEdit;
+    idata.btnCancel = btnCancel;
+    if (window.worker) {
+        // console.log('updateOrderPanel', idata);
+        window.worker.postMessage({ data: idata, action: 'updateMainOrderPanel' });
+    } else {
+        console.error("Chưa khởi tạo worker !");
+    }
+    // $('#op-order-status').prepend('<tr>' + row + '</tr>');
+    // objOrderPanel.max_PK2 = objOrderPanel.max_PK2 + 1;
+}
+
+objOrderPanel.WK_UpdateMainOrderPanel = function (res) {
+    // console.log(res, 'e.data');
+    // if (objOrderPanel.create == 1) {
+    //     $('#op-order-status tr:last').remove();
+    // }
+    $('#op-order-status').prepend(res.data);
+    objOrderPanel.max_PK2 = objOrderPanel.max_PK2 + 1;
+}
+
+
+objOrderPanel.insertNewRowConditionOrder = function (idata, i) {
+    // {"orderNo":"1","pk_orderNo":"53489","accountCode":"0038958","side":"B","symbol":"VN30F1807","showPrice":"930.0","volume":"1","condition":"","result":"0","active_time":"","send_time":"11:05:51","cancel_time":"","group":"FU","channel":"I","maxPrice":"","soPrice":"930","orderType":"SU","from_time":"29/06/2018","exp_time":"29/06/2018","status":"0","details":""}
+    // co roi thi thoi
+
+    // console.log(JSON.stringify(idata));
+    var string = JSON.stringify(idata).toString();
+    if ($('#no_' + idata.stop_order_id).length > 0) {
+        return;
+    }
+    var row = '';
+    if (idata.STATUS != orderStatus.pendingTrigger) {
+        row += '	<td class="text-center"></td>';
+    }
+    else {
+        // <a href="javascript:void(0);" id="btnu_' + idata.pk_orderNo + '" onclick="objOrderPanel.UpdateOrderNormal(this)"><i class="fa fa-pencil-square-o" aria-hidden="true"></i></a>\
+        if (idata.ROW_NUM > 0) {
+            if (idata.STOP_ORDER_TYPE == orderListTrailingStop || idata.STOP_ORDER_TYPE === orderListOCO) {
+                row += '	<td class="" style="display: flex; justify-content: space-around;">\
+				<a href="javascript:void(0);" id="btne_' + idata.STOP_ORDER_ID + '" onclick="objOrderPanel.deleteOrderCondition(\'' + idata.STOP_ORDER_ID + '\',\'' + idata.SIDE + '\', \'' + idata.STOP_ORDER_TYPE + '\',\'' + idata.SYMBOL + '\',\'' + idata.ACCOUNT_NO + '\');">\
+				<i class="fa fa-trash-o" aria-hidden="true"></i></a></td>';
+            } else {
+                row += "	<td class='' style='display: flex; justify-content: space-around;'>\
+				<a href='javascript:void(0);' id='btnu_" + idata.STOP_ORDER_ID + "' onclick='objOrderPanel.UpdateOrderCondition(this, " + string + ")'><i class='fa fa-pencil-square-o' aria-hidden='true'></i></a>\
+				<a href='javascript:void(0);' id='btne_" + idata.STOP_ORDER_ID + "' onclick='objOrderPanel.deleteOrderCondition(\"" + idata.STOP_ORDER_ID + "\",\"" + idata.SIDE + "\",\"" + idata.STOP_ORDER_TYPE + "\",\"" + idata.SYMBOL + "\",\"" + idata.ACCOUNT_NO + "\");'>\
+				<i class='fa fa-trash-o' aria-hidden='true'></i></a></td>";
+            }
+
+        }
+        else {
+            row += '	<td class="text-center"><span class="text-center cancel disable" id="btne_' + idata.STOP_ORDER_ID + '">Sửa</span></td><td></td>';
+        }
+    }
+
+    // row += '	<td class="txt_right text-center fixed-side first-col" id="no_' + idata.pk_orderNo + '">' + idata.orderNo + '</td>';
+    row += '	<td class="txt_right text-center" id="no_' + idata.STOP_ORDER_ID + '">' + idata.PK_ID + '</td>';
+    if (idata.STOP_ORDER_TYPE == orderListOrderStop) {
+        row += '	<td class="text-center">Stop Order</td>';
+    } else if (idata.STOP_ORDER_TYPE == orderListTrailingStop) {
+        row += '	<td class="text-center">Trailing Stop</td>';
+    } else if (idata.STOP_ORDER_TYPE == orderListSLTP && idata.STOP_ORDER_SUB_TYPE == orderListSL) {
+        row += '	<td class="text-center">Stop Loss</td>';
+    } else if (idata.STOP_ORDER_TYPE == orderListSLTP && idata.STOP_ORDER_SUB_TYPE == orderListTP) {
+        row += '	<td class="text-center">Take Profit</td>';
+    } else if (idata.STOP_ORDER_TYPE === orderListOCO && idata.STOP_ORDER_SUB_TYPE === orderListSL) {
+        row += '	<td class="text-center">OCO SL</td>';
+    } else if (idata.STOP_ORDER_TYPE === orderListOCO && idata.STOP_ORDER_SUB_TYPE === orderListTP) {
+        row += '	<td class="text-center">OCO TP</td>';
+    } else {
+        row += '	<td class="text-center">Arbitrage</td>';
+    }
+    row += '	<td class="text-center">' + idata.CREATED_TIME + '</td>';
+    row += '	<td class="text-center fifth-col">' + idata.ACCOUNT_NO + '</td>';
+
+    // ma chung khoan
+    row += '	<td class="text-center">' + idata.SYMBOL + '</td>';
+    if (idata.SIDE_NAME == 'Long') {
+        row += '	<td class="text-center text-green font-weight-semi-bold">LONG</td>';
+    }
+    else {
+        row += '	<td class="text-center text-red font-weight-semi-bold">SHORT</td>';
+    }
+    // if (idata.group == 'FU') {
+    // 	if (idata.side == 'B') {
+    // 		row += '	<td class="text-center text-green font-weight-bold">LONG</td>';
+    // 	}
+    // 	else {
+    // 		row += '	<td class="text-center text-red font-weight-bold">SHORT</td>';
+    // 	}
+    // } else if (idata.group == 'EQ') {
+    // 	if (idata.side == 'B') {
+    // 		row += '	<td class="text-center text-green font-weight-bold">MUA</td>';
+    // 	}
+    // 	else {
+    // 		row += '	<td class="text-center text-red font-weight-bold">BÁN</td>';
+    // 	}
+    // }
+    // gia dat
+    var tsOpenLog = '';
+    if (idata.orderType == 'TS') {
+        row += '	<td id="pl_price_' + idata.stSTOP_ORDER_IDop_order_id + '">-</td>';
+        tsOpenLog = 'onclick="openTSLog(' + idata.STOP_ORDER_ID + ')";';
+    } else {
+        var placedPrice = idata.PLACED_PRICE;
+        if (idata.PRICE_TYPE != 'LO') {
+            placedPrice = idata.PRICE_TYPE;
+        }
+        row += '	<td class="txt_right" id="pl_price_' + idata.STOP_ORDER_ID + '">' + placedPrice + '</td>';
+    }
+
+    // khoi luong dat
+    row += '	<td class="text-center" id="order_vol_' + idata.STOP_ORDER_ID + '">' + idata.QUANTITY + '</td>';
+
+    // trang thai
+    if (idata.status == 1 && (idata.orderType == 'SU' || idata.orderType == 'SL')) {
+        if (!idata.details.toString().includes('-')) {
+            row += '	<td id="st_' + idata.pk_orderNo + '" class="text-center" style="display: flex;"><span>' + getStatusCondition(idata.status) + '&nbsp; </span><span  data-tooltip="Số hiệu lệnh: ' + idata.details + '"><i class="fa fa-info-circle" aria-hidden="true" style="padding-top: 5px;"></i></span></td>';
+        } else {
+            row += '	<td id="st_' + idata.pk_orderNo + '" class="text-center" style="display: flex;"><span>' + getStatusCondition(idata.status) + '&nbsp; </span><span  data-tooltip="Lỗi: ' + getMessage(idata.details) + '"><i class="fa fa-info-circle" aria-hidden="true" style="padding-top: 5px;"></i></span></td>';
+        }
+    } else {
+        if (getStatusConditionNew(idata.STATUS, idata.ORDER_STATUS) == 'Từ chối') {
+            var msg = '';
+            if (idata.REASON) {
+                if (idata.REASON.indexOf('-') != -1 && idata.REASON.indexOf(':') != -1) {
+                    var code = idata.REASON.substring(0, idata.REASON.indexOf(":"));
+                    msg = getMessage(code);
+                } else {
+                    msg = getMessage(idata.REASON);
+                }
+            } else {
+                msg = idata.REASON;
+            }
+            row += '	<td class="text-center tooltipTableC id="order_st_' + idata.STOP_ORDER_ID + '" class="text-center"><span class="tooltiptext">' + msg + '</span><i class="fa fa-exclamation-circle" aria-hidden="true">&nbsp</i>' + '<span>' + getStatusConditionNew(idata.STATUS, idata.ORDER_STATUS) + '</span></td>';
+            // row += '<td class="text-center tooltipC">Arbitrage<span class="tooltiptext">Mã đối ứng: ' + idata.product + '</span></td>'
+        } else {
+            row += '	<td id="order_st_' + idata.STOP_ORDER_ID + '" class="text-center"><span>' + getStatusConditionNew(idata.STATUS, idata.ORDER_STATUS) + '</span></td>';
+        }
+    }
+
+    // Điều kiện kích hoạt
+    var soPrice = '';
+    if (idata.C_SO_PRICE && idata.C_SO_PRICE !== 'null') {
+        soPrice = "Giá thị trường " + idata.C_SO_PRICE;
+    }
+    row += '	<td class="txt_left" id="sp_condition_' + idata.STOP_ORDER_ID + '" ' + tsOpenLog + '>' + soPrice + '</td>';
+
+    // kenh dat
+    if (idata.C_CHANEL_NAME == 'I') {
+        row += '	<td class="text-center">Web Trade</td>';
+    }
+    else if (idata.C_CHANEL_NAME == 'D') {
+        row += '	<td class="text-center">Broker</td>';
+    } else if (idata.C_CHANEL_NAME && idata.C_CHANEL_NAME !== 'null') {
+        row += '	<td class="text-center">' + idata.C_CHANEL_NAME + '</td>';
+    } else {
+        row += '	<td class="text-center"></td>';
+    }
+
+    //Khoảng chốt lời/cắt lỗ
+    // if (idata.STOP_ORDER_TYPE == orderListSLTP) {
+    // 	row += '	<td class="text-center">' + idata.TRAILING_AMOUNT + '</td>';
+    // } else {
+    // 	row += '	<td class="text-center"></td>';
+    // }
+
+    // Bien truot gia
+    if (idata.STOP_ORDER_TYPE == orderListTrailingStop) {
+        row += '	<td class="text-center">' + idata.TRAILING_AMOUNT + '</td>';
+    } else {
+        row += '	<td class="text-center"></td>';
+    }
+
+    // Bien độ giá
+    if (idata.STOP_ORDER_TYPE == orderListTrailingStop || idata.STOP_ORDER_TYPE == orderListOCO) {
+        row += '	<td class="text-center">' + idata.SPREAD + '</td>';
+    } else {
+        row += '	<td class="text-center"></td>';
+    }
+
+    // SHL gốc
+    var oriOrderId = idata.ORI_ORDER_ID && idata.ORI_ORDER_ID != 'null' ? idata.ORI_ORDER_ID : '';
+    if (oriOrderId) {
+        row += "<td class='text-center' id='order_ori_" + idata.STOP_ORDER_ID + "'><a class='normal normal-order-detail' href='javascript:void(0);' id='btne_parent_" + idata.STOP_ORDER_ID + "' onclick='objOrderPanel.getOrderInfoByPKOrderNo(this, \"" + idata.ACCOUNT_NO + "\", \"" + idata.FO_PK_ORI_ORDER_ID + "\", true);'><em>" + oriOrderId + "</em></a></td>"
+    } else {
+        row += '	<td class="text-center" id="order_ori_' + idata.STOP_ORDER_ID + '"></td>';
+    }
+
+    // Xem chi tết
+    if (idata.STATUS != orderStatus.triggered) {
+        row += '	<td class="text-center" id="order_sub_' + idata.STOP_ORDER_ID + '"></td>';
+    }
+    else {
+        var foOrderId = idata.FO_ORDER_ID && idata.FO_ORDER_ID != 'null' ? idata.FO_ORDER_ID : '';
+        // <a href="javascript:void(0);" id="btnu_' + idata.pk_orderNo + '" onclick="objOrderPanel.UpdateOrderNormal(this)"><i class="fa fa-pencil-square-o" aria-hidden="true"></i></a>\
+        if (foOrderId) {
+            // row += '	<td class="text-center"><a href="javascript:void(0);" id="btne_' + idata.pk_orderNo + '" onclick=objOrderPanel.openOrderDetail(this,\'' + string + '\', \'' + idata.active_time + '\',\'' + idata.cancel_time + '\',\'' + idata.pk_orderNo + '\',  \'' + idata.side + '\',\'' + idata.group + '_' + idata.orderNo + '\',\'' + idata.symbol + '\',\'' + idata.showPrice + '\',\'' + idata.volume + '\',\'' + idata.accountCode + '\', \'' + idata.status + '\');">Xem chi tiết</a></td>';
+            row += "<td class='text-center' id='order_sub_" + idata.STOP_ORDER_ID + "'><a class='normal' href='javascript:void(0);' id='btne_child_" + idata.STOP_ORDER_ID + "' onclick='objOrderPanel.getOrderInfoByPKOrderNo(this, \"" + idata.ACCOUNT_NO + "\", \"" + idata.FO_PK_ORDER_ID + "\", false);'><em>Xem chi tiết</em></a></td>"
+        }
+        else {
+            row += '	<td class="text-center" id="order_sub_' + idata.STOP_ORDER_ID + '"></td>';
+        }
+    }
+
+    if (objOrderPanel.create == 1) {
+        $('#tbodyContentCondition tr:last').remove();
+    }
+
+    $('#tbodyContentCondition').prepend('<tr class="table-condition-order-item">' + row + '</tr>');
+
+    objOrderPanel.updateMax(idata.ROW_NUM);
+}
+
+objOrderPanel.updateMax = function (pkMax) {
+    if (objOrderPanel.max_PK < pkMax) {
+        objOrderPanel.max_PK = pkMax;
+    }
+}
+
+objOrderPanel.insertParentDetailRow = function (dis, data) {
+    var row = "";
+    if (data && data.orderNo) {
+        row += '<td class="text-center">' + data.orderNo + '</td>';
+        row += '<td class="text-center">' + data.orderTime + '</td>';
+        row += '<td class="text-center">' + data.accountCode + '</td>';
+        row += '<td class="text-center">' + data.symbol + '</td>';
+        if (data.side == 'B') {
+            row += '<td class="text-center text-green font-weight-bold">LONG</td>';
+        } else {
+            row += '<td class="text-center text-red font-weight-bold">SHORT</td>';
+        }
+
+        row += '<td class="text-center">' + data.volume + '</td>';
+        row += '<td class="text-center">' + data.showPrice + '</td>';
+        // khoi luong khop
+        row += '<td class="text-center">' + data.matchVolume + '</td>';
+        // row += '<td class="text-center">' + orderCodiType + '</td>';
+        var cancelTime = data.cancelTime && data.cancelTime != 'null' ? data.cancelTime : '';
+        if (fnGetOrderStatusCode(data) !== "Chờ hủy" || data.status_code !== "2") {
+            row += '<td class="text-center">' + cancelTime + '</td>';
+        } else {
+            row += '<td class="text-center"></td>';
+        }
+        var triggedTime = data.match_time && data.match_time != "null" ? data.match_time : '';
+        row += '<td class="text-center">' + triggedTime + '</td>';
+        //action
+        var string = JSON.stringify(data);
+        if (data && data.status) {
+            if ((data.status.indexOf('X') > 0) || data.status_code === "4" || data.status_code === "2" ||
+                (data.volume == data.matchVolume) || (data.status.indexOf('R') > 0)
+                || data.showPrice === "MOK" || data.showPrice === "MAK") {
+                row += '	<td class="text-center"></td>';
+            } else {
+                // <a href="javascript:void(0);" id="btnu_' + idata.pk_orderNo + '" onclick="objOrderPanel.UpdateOrderNormal(this)"><i class="fa fa-pencil-square-o" aria-hidden="true"></i></a>\
+                if (data.orderNo > 0 && data.showPrice === "ATO" || data.showPrice === "ATC") {
+                    row += '<td style="display: flex; justify-content: space-around;">\
+					<a href="javascript:void(0);" id="btne_parent_detail_' + data.pk_orderNo + '" onclick="objOrderPanel.deleteOrder(\'' + data.orderNo + '\',\'' + data.side + '\',\'' + data.group + '_' + data.orderNo + '\',\'' + data.symbol + '\',\'' + data.showPrice + '\',\'' + data.volume + '\',\'' + data.accountCode + '\');">\
+					<i class="fa fa-trash-o" aria-hidden="true"></i></a></td>';
+                } else if (data.orderNo > 0) {
+                    row += '	<td style="display: flex; justify-content: space-around;">\
+								<a href="javascript:void(0);" id="btnu_parent_detail_' + data.pk_orderNo + '" onclick="objOrderPanel.UpdateOrderNormalFromOrderCon(this)"><i class="fa fa-pencil-square-o" aria-hidden="true"></i></a>\
+								<a href="javascript:void(0);" id="btne_parent_detail_' + data.pk_orderNo + '" onclick="objOrderPanel.deleteOrder(\'' + data.orderNo + '\',\'' + data.side + '\',\'' + data.group + '_' + data.orderNo + '\',\'' + data.symbol + '\',\'' + data.showPrice + '\',\'' + data.volume + '\',\'' + data.accountCode + '\');">\
+								<i class="fa fa-trash-o" aria-hidden="true"></i></a></td>';
+                } else {
+                    row += '	<td class="text-center"><span class="text-center cancel disable" id="btne_' + data.pk_orderNo + '">Sửa</span></td><td></td>';
+                }
+            }
+        } else {
+            row += '	<td class="text-center"></td>';
+        }
+    } else {
+        row = '<td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>'
+    }
+    $('#tbodyContentDetail').prepend('<tr>' + row + '</tr>');
+}
+
+objOrderPanel.insertDetailRow = function (dis, data) {
+    var orderNo = $(dis).parent().parent().children('td').eq(1).html();
+    var time = $(dis).parent().parent().children('td').eq(3).html();
+    var tk = $(dis).parent().parent().children('td').eq(4).html();
+    var ll = $(dis).parent().parent().children('td').eq(6).html();
+    var mack = $(dis).parent().parent().children('td').eq(5).html();
+    var kl = $(dis).parent().parent().children('td').eq(8).html();
+    var gd = $(dis).parent().parent().children('td').eq(7).html();
+    var orderCodiType = $(dis).parent().parent().children('td').eq(2).text();
+
+    var row = "";
+    row += '<td class="text-center">' + orderNo + '</td>';
+    row += '<td class="text-center">' + time + '</td>';
+    row += '<td class="text-center">' + tk + '</td>';
+    row += '<td class="text-center">' + mack + '</td>';
+    if (ll == 'LONG') {
+        row += '<td class="text-center text-green font-weight-bold">' + ll + '</td>';
+    } else {
+        row += '<td class="text-center text-red font-weight-bold">' + ll + '</td>';
+    }
+
+    row += '<td class="text-center">' + kl + '</td>';
+    row += '<td class="text-center">' + gd + '</td>';
+    // khoi luong khop
+    row += '<td class="text-center">' + '</td>';
+    // row += '<td class="text-center">' + orderCodiType + '</td>';
+    var cancelTime = data.CANCEL_DATE && data.CANCEL_DATE != 'null' ? data.CANCEL_DATE : '';
+    row += '<td class="text-center">' + cancelTime + '</td>';
+    var triggedTime = data.TRIGGERED_DATE && data.TRIGGERED_DATE != "null" ? data.TRIGGERED_DATE : '';
+    row += '<td class="text-center">' + triggedTime + '</td>';
+    //action
+    var string = JSON.stringify(data);
+    if (data.STATUS != orderStatus.pendingTrigger) {
+        row += '	<td class="text-center"></td>';
+    } else {
+        // <a href="javascript:void(0);" id="btnu_' + idata.pk_orderNo + '" onclick="objOrderPanel.UpdateOrderNormal(this)"><i class="fa fa-pencil-square-o" aria-hidden="true"></i></a>\
+        if (data.ROW_NUM > 0) {
+            row += "	<td style='display: flex; justify-content: space-around;'>\
+				<a href='javascript:void(0);' id='btnu_detail_" + data.STOP_ORDER_ID + "' onclick='objOrderPanel.UpdateOrderCondition(this, " + string + ")'><i class='fa fa-pencil-square-o' aria-hidden='true'></i></a>\
+				<a href='javascript:void(0);' id='btne_detail_" + data.STOP_ORDER_ID + "' onclick='objOrderPanel.deleteOrder(\"" + data.STOP_ORDER_ID + "\",\"" + data.SIDE + "\",\"" + data.ROW_NUM + "\",\"" + data.SYMBOL + "\",\"" + data.PLACED_PRICE + "\",\"" + data.QUANTITY + "\",\"" + data.ACCOUNT_NO + "\");'>\
+				<i class='fa fa-trash-o' aria-hidden='true'></i></a></td>";
+        } else {
+            row += '	<td class="text-center"><span class="text-center cancel disable" id="btne_' + data.pk_orderNo + '">Sửa</span></td><td></td>';
+        }
+    }
+    $('#tbodyContentDetail').prepend('<tr>' + row + '</tr>');
+
+}
+
+objOrderPanel.deleteOrder = function (orderNo, side, groupOrder, symbol, showPrice, volume, accountCode) {
+
+    $("#modal_del_order_type").text(side == 'S' ? groupOrder.includes('EQ') ? 'BÁN' : 'SHORT' : groupOrder.includes('EQ') ? 'MUA' : 'LONG');
+    $("#modal_del_order_type").removeClass("orderTypeB orderTypeS").addClass("orderType" + side);
+    $("#modal_del_account").text(accountCode);
+    $("#modal_del_stock_cd").text(symbol);
+    $("#order_del_no_conf").val(orderNo);
+    $('#modal_text_warning_oco').css("display", "none");
+
+    if (objConfig.CONFIRM_ORDER) {
+        $("#deleteOrderModal").modal();
+        if (groupOrder.includes('EQ')) {
+            $('#btn_save_cancel_order').attr('onclick', 'cancelOrder("orderCS")');
+        } else {
+            $('#btn_save_cancel_order').attr('onclick', 'cancelOrder("order")');
+        }
+    } else if (groupOrder.includes('EQ')) {
+        // cơ sở
+        cancelOrder('orderCS');
+    } else {
+        // phái sinh
+        cancelOrder('order');
+    }
+
+}
+
+objOrderPanel.deleteOrderCondition = function (orderNo, side, stopOrderType, symbol, accountCode) {
+    $("#modal_del_order_type").text(side == 'Short' || side == 'S' ? 'SHORT' : 'LONG');
+    var style = (side == 'Short' || side == 'S') ? "S" : "B";
+    $("#modal_del_order_type").removeClass("orderTypeB orderTypeS").addClass("orderType" + style);
+    $("#modal_del_account").text(accountCode);
+    $("#modal_del_stock_cd").text(symbol);
+    $("#order_del_no_conf").val(orderNo);
+
+    if (stopOrderType === orderListOCO) {
+        $('#modal_text_warning_oco').css("display", "block");
+    }
+
+    if (objConfig.CONFIRM_ORDER) {
+        $("#deleteOrderModal").modal();
+        $('#btn_save_cancel_order').attr('onclick', 'cancelOrder("advance","' + stopOrderType + '")');
+    } else {
+        cancelOrder('advance', stopOrderType);
+    }
+
+}
+
+function nextOrderList() {
+    console.log(objOrderPanel.numberRow, objOrderPanel.max_PK)
+    if (objOrderPanel.numberRow <= objOrderPanel.max_PK) {
+        $('#hdnPageCurrentIntime').val(parseInt($('#hdnPageCurrentIntime').val()) + 1);
+        $('#divProcessButton').find('#A2').text('| ' + $('#hdnPageCurrentIntime').val() + ' |');
+        if (objOrderPanel.screen == '' || objOrderPanel.screen == 'order') {
+            objOrderPanel.showOrderList();
+        } else {
+            objOrderPanel.showConditionOrderList();
+        }
+    }
+}
+
+function preOrderList() {
+    if (parseInt($('#hdnPageCurrentIntime').val()) > 1) {
+        $('#hdnPageCurrentIntime').val(parseInt($('#hdnPageCurrentIntime').val()) - 1);
+        $('#divProcessButton').find('#A2').text('| ' + $('#hdnPageCurrentIntime').val() + ' |');
+        // objOrderPanel.showOrderListView2();
+        objOrderPanel.showOrderList();
+    }
+}
+
+function nextOrderList2() {
+    if (objOrderPanel.numberRow <= objOrderPanel.max_PK2) {
+        $('#hdnPageCurrentIntime2').val(parseInt($('#hdnPageCurrentIntime2').val()) + 1);
+        $('#divProcessPagging').find('#A222').text('| ' + $('#hdnPageCurrentIntime2').val() + ' |');
+        objOrderPanel.showOrderListView2();
+    }
+}
+
+function preOrderList2() {
+    if (parseInt($('#hdnPageCurrentIntime2').val()) > 1) {
+        $('#hdnPageCurrentIntime2').val(parseInt($('#hdnPageCurrentIntime2').val()) - 1);
+        $('#divProcessPagging').find('#A222').text('| ' + $('#hdnPageCurrentIntime2').val() + ' |');
+        objOrderPanel.showOrderListView2();
+    }
+}
+
+function sendText() {
+    var msg = {
+        type: "message",
+        text: document.getElementById("text").value,
+        id: clientID,
+        date: Date.now()
+    };
+    return msg;
+}
+
+
+// 20200324 - old function not use
+function getStatus(status) {
+
+    // if(status == null || status == '') return 'Chưa kích hoạt';
+
+    if (status.indexOf('X') >= 0) {
+        return 'Đã hủy';
+    }
+
+    if (status == 'P') {
+        return 'Chờ khớp';
+    }
+    else if ((status == 'PW') || (status == 'PCW') || (status == 'PMW')) {
+        return 'Chờ hủy';
+    }
+    else if (status == 'PM' || status == 'PCM') {
+        return 'Đã khớp';
+    }
+    else if (status == 'PMX') {
+        return 'Khớp một phần';
+    }
+    else if (status == 'PC') {
+        return 'Đã sửa';
+    }
+    else if (status == 'PCWX') {
+        return 'Đã hủy';
+    }
+    else if (status.indexOf('R') > 0) {
+        return 'Bị từ chối';
+    }
+
+    return status;
+}
+
+function getStatusByStatusCode(idata) {
+    let statusCode = idata.status_code || idata.statusCode;
+    statusCode = statusCode.toString();
+    if (!statusCode) {
+        return "";
+    }
+    switch (statusCode) {
+        case "0":
+            return "Chờ xử lý";
+        case "1":
+            return "Chờ khớp";
+        case "2":
+            return "Chờ hủy";
+        case "3":
+            return "Chờ sửa";
+        case "4":
+            return "Đã hủy";
+        case "5":
+            return "Đã sửa";
+        case "6":
+            return "Khớp 1 phần";
+        case "7":
+            return "Đã khớp";
+        case "8":
+            return "Khớp 1 phần đã hủy";
+        case "9":
+            return "Đã hủy 1 phần";
+        default:
+            return "";
+    }
+    // switch(statusCode) {
+    // 	case "0":
+    // 		return "Chờ xử lý";
+    // 	case "1":
+    // 		return "Chờ khớp";
+    // 	case "2":
+    // 		return "Chờ hủy";
+    // 	case "3":
+    // 		return "Chờ sửa";
+    // 	case "4":
+    // 		return "Đã hủy";
+    // 	case "5": 
+    // 		return "Đã sửa";
+    // 	case "6":
+    // 		return matchOnePart;
+    // 	case "7":
+    // 		return "Đã khớp";
+    // 	case "8":
+    // 		return matchOneCancel;
+    // 	case "9":
+    // 		return "Đã hủy 1 phần";
+    // 	default:
+    // 		return "";
+
+    // }
+}
+
+function fnGetOrderStatusCode(idata) {
+    var pStatus = idata.status;
+    var pMatchVolume = idata.matchVolume;
+    var pVolume = idata.volume;
+    var pQuote = idata.quote;
+
+    if ((pStatus == "PMC" || pStatus == "PCM") && StringToInt(pMatchVolume) < StringToInt(pVolume)) {
+        return matchOnePart; // "MATCH_PARTIAL";
+    }
+    if ((pStatus == "PMC" || pStatus == "PCM") && StringToInt(pMatchVolume) == StringToInt(pVolume)) {
+        return "Đã khớp"; // "MATCH_FULL";
+    }
+
+    if ((pStatus == "PMX" || pStatus == "PMWX") && StringToInt(pMatchVolume) > 0) {
+        return matchOneCancel; // "MATCH_PARTIAL_CANCELED";
+    }
+    if (pStatus == "PM" && StringToInt(pMatchVolume) < StringToInt(pVolume)) {
+        return matchOnePart; // "MATCH_PARTIAL";
+    }
+    if (pStatus.substring(pStatus.length - 1, pStatus.length) == "M") {
+        return "Đã khớp"; // "MATCH_FULL";
+    }
+    if (pStatus == "PM") {
+        return "Đã khớp"; // "MATCH_FULL";
+    }
+    if (pStatus == "PW" || pStatus == "PMW") {
+        return "Chờ hủy"; // "MATCH_PENDING";
+    }
+    if (pStatus == "PC") {
+        if (pQuote === "Y") {
+            return "Chờ khớp"; // "MATCH_PENDING";
+        } else {
+            return "Chờ sửa"; // "EDIT_PENDING"
+        }
+    }
+    if (pStatus.substring(pStatus.length - 1, pStatus.length) == "X") {
+        return "Đã hủy"; // "CANCELED";
+    }
+    if (pStatus == "P") {
+        return "Chờ khớp"; // "MATCH_PENDING";
+    }
+    if (pStatus.substring(pStatus.length - 1, pStatus.length) == "C") {
+        return "Chờ khớp"; // "MATCH_PENDING";
+    }
+    return pStatus;
+}
+
+function fnGetOrderConditionStatusCode(idata) {
+    var pStatus = idata.status;
+    var oStatus = idata.orderStatus;
+    if (pStatus == 'TRIGGERED') {
+        if (oStatus == 'Rejected') {
+            return "Từ chối";
+        } else if (oStatus == 'New' || oStatus == 'Filled' || oStatus == 'Partial_filled') {
+            return "Đã kích hoạt";
+        }
+    }
+
+    if (pStatus == 'CANCELED') {
+        return "Đã hủy";
+    }
+
+    return pStatus;
+
+}
+
+
+function getStatusOP(status) {
+
+    // if(status == null || status == '') return 'Chưa kích hoạt';
+
+    if (status.indexOf('X') >= 0) {
+        return 'Canceled';
+    }
+
+    if (status == 'P') {
+        return 'Pending';
+    }
+    else if ((status == 'PW') || (status == 'PCW') || (status == 'PMW')) {
+        return 'Pending';
+    }
+    else if (status == 'PM' || status == 'PCM' || status == 'PWM') {
+        return 'Complete';
+    }
+    else if (status == 'PMX') {
+        return 'Pending';
+    }
+    else if (status == 'PC') {
+        return 'Pending';
+    }
+    else if (status == 'PCWX') {
+        return 'Canceled';
+    }
+    else if (status.indexOf('R') > 0) {
+        return 'Canceled';
+    }
+
+    return status;
+}
+
+function getStatusConditionNew(status, orderStatus) {
+
+    if (status == 'PENDING_TRIGGER') {
+        status = 'Chờ kích hoạt';
+    } else if (status == 'TRIGGERED') {
+        if (orderStatus == 'Rejected') {
+            status = 'Từ chối';
+        } else if (orderStatus == 'New' || orderStatus == 'Filled' || orderStatus == 'Partial_filled') {
+            status = 'Đã kích hoạt';
+        } else {
+            status = 'Đã kích hoạt';
+        }
+    } else if (status == 'CANCELED') {
+        status = 'Đã hủy';
+    } else if (status == 'PENDING_CANCEL') {
+        status = 'Đang chờ hủy';
+    } else if (status == 'EXPIRED') {
+        status = 'Hết hiệu lực'
+    }
+
+    return status;
+}
+
+function getStatusCondition(status) {
+
+    if (status == 0) {
+        status = 'Chờ kích hoạt';
+    } else if (status == 1) {
+        status = 'Đã kích hoạt';
+    } else if (status == 2) {
+        status = 'Đã hủy';
+    }
+
+    return status;
+}
+
+function getCondition(orderType, soPrice) {
+
+    var condition = 'Giá thị trường';
+    if (orderType == 'SU') {
+        condition += '<=' + soPrice;
+    } else if (orderType == 'SL') {
+        condition += '>=' + soPrice;
+    } else if (orderType == 'TS') {
+        condition = 'Trailling Stop(' + soPrice + ')';
+    }
+
+    return condition;
+}
+
+
+function openOrderInfo(orderNo, pk_orderNo) {
+
+    // {"group":"Q","user":"034300","session":"0967b76a-95fb-432f-8bb9-ab711cca8f05","data":{"type":"string","cmd":"Web.Order.OrderDetail","p1":"2262990","p2":"","p3":"","p4":""}}
+
+    var pData = { group: "Q", user: objUser.user, session: objUser.sid, c: "H", data: { type: "string", cmd: "Web.Order.OrderDetail", p1: "" + pk_orderNo, p2: "", p3: "", p4: "" } };
+
+    $.ajax({
+        type: "POST",
+        url: urlCore,
+        cache: false,
+        data: JSON.stringify(pData),
+        contentType: "application/json; charset=utf-8",
+        dataType: "json",
+        success: function (vData) {
+            //console.log(vData);   
+            // // {"cmd":"Web.Order.OrderDetail","oID":"","rc":1,"rs":"null","data":[{"time":"14:29:23","type":"MATCHED","vol":"4","price":"896","note":""}]}
+            if (vData.rc > 0) {
+                var tableInfo = "<table class='table table-hover'> \
+								<thead> \
+									<tr> \
+										<th style=\"border-bottom: none !important; border-top: none;\">STT</th> \
+										<th style=\"border-bottom: none !important; border-top: none;\">KL khớp</th> \
+										<th style=\"border-bottom: none !important; border-top: none;\">Giá khớp</th> \
+										<th style=\"border-bottom: none !important; border-top: none;\">Thời gian</th> \
+									</tr> \
+								</thead> \
+								<tbody> ";
+                $.each(vData.data, function (i, idata) {
+                    if (idata.type == 'MATCHED') {
+                        tableInfo += "<tr> \
+										<td>" + orderNo + "</td> \
+										<td>" + idata.vol + "</td> \
+										<td>" + idata.price + "</td> \
+										<td>" + idata.time + "</td> \
+									</tr>";
+                    }
+                });
+                tableInfo += "</tbody></table>";
+                bootbox.dialog({
+                    message: tableInfo,
+                    title: "Chi tiết khớp lệnh",
+                    className: "modal1"
+                });
+            } else {
+                shownotification('Warning', getMessage(vData.rc, vData.rs), 'warning');
+            }
+        },
+        error: function (err) {
+
+        }
+    });
+}
+
+$('#myDropdown').on('hide.bs.dropdown', function () {
+    $('.numNotification').text(0);
+    $('#numNotification').css('display', 'none');
+    $('.detailNotice').find('.dropdown-item').remove();
+});
+
+$('input[name=statusFilter]').change(function () {
+    if (objOrderPanel.screen == '' || objOrderPanel.screen == 'order') {
+        objOrderPanel.showOrderList();
+    } else {
+        objOrderPanel.showConditionOrderList();
+    }
+});
+
+objOrderPanel.UpdateOrderNormal = function (orderNo, side, symbol, showPrice, matchedVol, unmatchVol, accountCode) {
+    var tk = accountCode;
+    var ll = side === "B" ? "LONG" : "SHORT";
+    var mack = symbol;
+    var gd = showPrice;
+    priceLock = showPrice;
+    volLock = unmatchVol;
+
+    $('#order_update_no_conf').val(orderNo);
+    $('#modal_update_order_type').text(ll);
+    if (ll == 'SHORT') {
+        $('#modal_update_order_type').removeClass('orderTypeS').removeClass('orderTypeB').addClass('orderTypeS');
+    } else {
+        $('#modal_update_order_type').removeClass('orderTypeS').removeClass('orderTypeB').addClass('orderTypeB');
+    }
+    $('#modal_update_account').text(tk);
+    $('#modal_update_stock_cd').text(mack);
+    $('#order_update_stock').val(mack);
+    $('#modal_update_vol').val(unmatchVol);
+    $('#order_matchedVol').val(matchedVol);
+    $('#modal_update_price').val(gd);
+    onchangePrice();
+    onchangeVol();
+    $('#updateOrderModal').modal('show');
+}
+
+objOrderPanel.UpdateOrderNormalFromOrderCon = function (dis) {
+    var tk = $(dis).parent().parent().children('td').eq(2).html();
+    var ll = $(dis).parent().parent().children('td').eq(4).html();
+    var mack = $(dis).parent().parent().children('td').eq(3).html();
+    var kl = $(dis).parent().parent().children('td').eq(5).html();
+    var gd = $(dis).parent().parent().children('td').eq(6).html();
+
+    $('#order_update_no_conf').val($(dis).parent().parent().children('td').eq(0).html());
+    $('#modal_update_order_type').text(ll);
+    if (ll == 'SHORT') {
+        $('#modal_update_order_type').removeClass('orderTypeS').removeClass('orderTypeB').addClass('orderTypeS');
+    } else {
+        $('#modal_update_order_type').removeClass('orderTypeS').removeClass('orderTypeB').addClass('orderTypeB');
+    }
+    $('#modal_update_account').text(tk);
+    $('#modal_update_stock_cd').text(mack);
+    $('#order_update_stock').val(mack);
+    $('#modal_update_vol').val(kl);
+    $('#modal_update_price').val(gd);
+
+    // if (!objConfig.SAVE_PIN) {
+    // 	$('.cl-save-pin').css('display', 'none');
+    // 	global.AccountPinCD = '';
+    // } else {
+    // 	$('.cl-save-pin').css('display', '');
+    // }
+    // if(global.AccountPinCD == ''){
+    // 	$('#account_update_pin_cd').css('display', '');
+    // } else {
+    // 	$('#account_update_pin_cd').css('display', 'none');
+    // 	$('.cl-save-pin').css('display', 'none');
+    // }
+
+    $('#updateOrderModal').modal('show');
+}
+
+// update order conditionn
+objOrderPanel.UpdateOrderCondition = function (dis, data) {
+    $('#order_updateCondi_no_conf').val(data.STOP_ORDER_ID);
+    var mack = $(dis).parent().parent().children('td').eq(5).html();
+    $('#order_updateCondi_stock').val(mack);
+    $('#order_updateCondi_subType').val(data.STOP_ORDER_SUB_TYPE);
+    if (!data) {
+        var tk = $(dis).parent().parent().children('td').eq(4).html();
+        var ll = $(dis).parent().parent().children('td').eq(6).html();
+        var mack = $(dis).parent().parent().children('td').eq(5).html();
+        var kl = $(dis).parent().parent().children('td').eq(8).html();
+        var gd = $(dis).parent().parent().children('td').eq(7).html();
+        var orderCodiType = $(dis).parent().parent().children('td').eq(2).text();
+
+        $('#modal_updateCondi_order_type').text(ll);
+        if (ll == 'SHORT') {
+            $('#modal_updateCondi_order_type').removeClass('orderTypeS').removeClass('orderTypeB').addClass('orderTypeS');
+        } else {
+            $('#modal_updateCondi_order_type').removeClass('orderTypeS').removeClass('orderTypeB').addClass('orderTypeB');
+        }
+        $('#modal_updateCondi_account').text(tk);
+        $('#modal_updateCondi_stock_cd').text(mack);
+        $('#modal_updateCondi_vol_sltp').text(kl);
+        $('#modal_updateCondi_vol').val(kl);
+        $('#modal_updateCondi_price').val(gd);
+        $('#modal_update_condition_type').text(orderCodiType);
+    } else {
+        objCurrentOrder = data;
+        if (data.SIDE == "S") {
+            $('#modal_updateCondi_order_type').text('SHORT');
+            $('#modal_updateCondi_order_type').removeClass('orderTypeS').removeClass('orderTypeB').addClass('orderTypeS');
+        } else if (data.SIDE == "B") {
+            $('#modal_updateCondi_order_type').text('LONG');
+            $('#modal_updateCondi_order_type').removeClass('orderTypeS').removeClass('orderTypeB').addClass('orderTypeB');
+        }
+        $('#modal_updateCondi_account').text(data.ACCOUNT_NO);
+        $('#modal_updateCondi_stock_cd').text(data.SYMBOL);
+        $('#modal_updateCondi_vol').val(data.QUANTITY);
+        $('#modal_updateCondi_vol_sltp').text(data.QUANTITY);
+        var price = data.PRICE_TYPE && data.PRICE_TYPE != 'LO' && !data.PLACED_PRICE ? data.PRICE_TYPE : data.PLACED_PRICE;
+
+        $('#modal_updateCondi_price').val(price);
+        $('#modal_updateCondi_vol_sltp').text(data.QUANTITY);
+
+        if (data.STOP_ORDER_TYPE == orderListOrderStop) {
+            $('#modal_update_condition_type').text('Stop Order');
+        } else if (data.STOP_ORDER_TYPE == orderListTrailingStop) {
+            $('#modal_update_condition_type').text('Trailing Stop');
+        } else if (data.STOP_ORDER_TYPE == orderListSLTP && data.STOP_ORDER_SUB_TYPE == orderListSL) {
+            $('#modal_update_condition_type').text('Stop Loss');
+        } else if (data.STOP_ORDER_TYPE == orderListSLTP && data.STOP_ORDER_SUB_TYPE == orderListTP) {
+            $('#modal_update_condition_type').text('Take Profit');
+        } else if (data.STOP_ORDER_TYPE == orderListSLTP) {
+            $('#modal_update_condition_type').text('Stop Loss/Take Profit');
+        } else {
+            $('#modal_update_condition_type').text('Arbitrage');
+        }
+    }
+    $('.modal-update-sltp').css('display', 'none');
+    $('.modal-update-trailing').css('display', 'none');
+    $('.modal-update-arbitrage').css('display', 'none');
+    $('.modal-update-stop-order').css('display', 'none');
+    $('.modal-update-vol').css('display', 'none');
+    $('.modal-update-vol-sltp').css('display', 'none');
+
+    if (data.STOP_ORDER_TYPE == orderListOrderStop) {
+        $('.modal-update-stop-order').css('display', '');
+        $('.modal-update-vol').css('display', '');
+        // $('#modal_updateCondi_vol_sltp').css('display', '');
+        if (data.RELATION == "GTEQ") {
+            $('#modal_update_trigger_price').val('SOL');
+        } else {
+            $('#modal_update_trigger_price').val('SOU');
+        }
+        $('#modal_update_trigger_price_index').val(data.TRIGGER_PRICE);
+    } else if (data.STOP_ORDER_TYPE == orderListSLTP) {
+        // $('.modal-update-sltp').css('display', '');
+        // $('.modal-update-stop-order').css('display', '');
+        $('.modal-update-vol-sltp').css('display', '');
+        // $('#modal_update_trigger_price_index').val(data.TRIGGER_PRICE);
+        if (data.STOP_ORDER_SUB_TYPE == orderListSL) {
+            $('.modal-update-sl').css('display', '');
+            $('#modal_update_stop_loss').val(data.TRIGGER_PRICE);
+            $('#modal_update_stop_losss_margin').val(data.SPREAD);
+        } else if (data.STOP_ORDER_SUB_TYPE == orderListTP) {
+            $('.modal-update-tp').css('display', '');
+            $('#modal_update_take_profit').val(data.TRIGGER_PRICE);
+        }
+
+    } else if ((data.STOP_ORDER_TYPE == 'arbitrage')) {
+        $('#modal-update-vol').css('display', '');
+        $('.modal-update-arbitrage').css('display', '');
+        $('#modal_update_ab_code').val(data.SYMBOL); // demo
+    }
+
+    // $('#account_updateCondi_pin_cd').val('');
+    // if (!objConfig.SAVE_PIN) {
+    // 	$('.cl-save-pin').css('display', 'none');
+    // 	global.AccountPinCD = '';
+    // } else {
+    // 	$('.cl-save-pin').css('display', '');
+    // }
+    // if(global.AccountPinCD != '' && global.AccountPinCD != null) {
+    // 	$('#account_updateCondi_pin_cd').val(global.AccountPinCD);
+    // 	$('#account_updateCondi_save_pin').attr('checked','checked');
+    // } else {
+    // 	$('#account_updateCondi_save_pin').removeAttr('checked');
+    // }
+
+    // $('#updateOrderModal').modal('show');
+    //demo
+    $('#updateOrderConditionModal').modal('show');
+}
+
+objOrderPanel.UpdateOrderView = function (dis) {
+    var tk = $('#right_account').val();
+    var ll = $(dis).parent().parent().children('td').eq(3).html();
+    var mack = $(dis).parent().parent().children('td').eq(2).html();
+    var kl = $(dis).parent().parent().children('td').eq(5).html();
+    var gd = $(dis).parent().parent().children('td').eq(4).html();
+
+    $('#order_update_no_conf').val($(dis).parent().parent().children('td').eq(1).html());
+    $('#modal_update_order_type').text(ll);
+    if (ll == 'SHORT') {
+        $('#modal_update_order_type').removeClass('orderTypeS').removeClass('orderTypeB').addClass('orderTypeS');
+    } else {
+        $('#modal_update_order_type').removeClass('orderTypeS').removeClass('orderTypeB').addClass('orderTypeB');
+    }
+    $('#modal_update_account').text(tk);
+    $('#modal_update_stock_cd').text(mack);
+    $('#order_update_stock').val(mack);
+    $('#modal_update_vol').val(kl);
+    $('#modal_update_price').val(gd);
+
+    // if (!objConfig.SAVE_PIN) {
+    // 	$('.cl-save-pin').css('display', 'none');
+    // 	global.AccountPinCD = '';
+    // } else {
+    // 	$('.cl-save-pin').css('display', '');
+    // }
+    // if(global.AccountPinCD == ''){
+    // 	$('#account_update_pin_cd').css('display', '');
+    // } else {
+    // 	$('#account_update_pin_cd').css('display', 'none');
+    // 	$('.cl-save-pin').css('display', 'none');
+    // }
+
+    $('#updateOrderModal').modal('show');
+}
+
+objOrderPanel.openOrderDetail = function (template, data, i, isSHL) {
+    $('#tbodyContentDetail tr:last').remove();
+    var tableHeadHeight = $('.order-table-header').outerHeight();
+    var offsetTop = $(template).parent().parent().position().top;
+    var marginRight = $(template).parent().outerWidth();
+    // let rowHeight = $(".table-condition-order-item").outerHeight();
+    var marginTop = offsetTop - tableHeadHeight;
+    $(".order-detail-table").css("margin-top", marginTop + "px");
+    if (isSHL) {
+        var lstColWidth = $('.table-cond-last-col').outerWidth();
+        marginRight = marginRight + lstColWidth;
+    }
+    $(".order-detail-table").css("right", marginRight + 15 + "px");
+    objOrderPanel.insertParentDetailRow(template, data);
+
+    $('#order_detail').toggle('slow');
+    // $('#order_detail').show();
+}
+// get order info by pk_orderNo
+objOrderPanel.getOrderInfoByPKOrderNo = function (template, accountNo, pkOrderNo, isSHL) {
+    try {
+        var pdata = {
+            group: "Q",
+            user: global.user,
+            session: global.sid,
+            c: "H",
+            data: { type: "string", cmd: "Web.Order.detail.by.pkno", p1: accountNo, p2: pkOrderNo, p3: "12", p4: "" }
+        }
+        $.ajax({
+            type: "POST",
+            url: urlCore,
+            cache: false,
+            data: JSON.stringify(pdata),
+            contentType: "application/json; charset=utf-8",
+            dataType: "json",
+            success: function (vData) {
+                if (vData.rc < 0) {
+                    shownotification('Warning', getMessage(vData.rc, vData.rs), 'warning');
+                } else if (vData.rc == 0) {
+                    shownotification('Warning', MessNotification.ErrorOrder, 'warning');
+                } else {
+                    var data = vData.data && vData.data.length > 0 ? vData.data[0] : {};
+                    objOrderPanel.openOrderDetail(template, data, i, isSHL);
+                }
+            },
+            error: function (e) {
+                // error
+            }
+        });
+    } catch (e) {
+
+    }
+}
+
+
+// update order condition
+
+function updateOrderCondition() {
+    var pData = {};
+    var pdata = {};
+    var isCheck = true;
+    var priceType = '';
+    var account = $('#modal_updateCondi_account').text();
+    var stopOrderType = $('#modal_update_condition_type').text();
+    var price = $("#modal_updateCondi_price").val();
+
+    var side = $('#modal_updateCondi_order_type').text();
+    var quantity = $('#modal_updateCondi_vol').val();
+    var group = "O";
+    var groupOrder = "FD";
+    // số hiệu lệnh
+    var orderId = $('#order_updateCondi_no_conf').val();
+    //validate placePrice
+    if ($("#modal_updateCondi_price").val() == '' && stopOrderType == "Stop Order") {
+        $("#modal_updateCondi_price").focus();
+        shownotification('Warning', MessNotification.RightPrice, 'warning');
+        isCheck = false;
+        return false;
+    } else if ($("#modal_updateCondi_price").val()) {
+        if (price != 'MAK' && price != 'MOK' && price != 'MTL' && stopOrderType != "Trailing Stop") {
+            if (StringToDouble(price) == 0) {
+                $("#modal_updateCondi_price").focus();
+                shownotification('Warning', MessNotification.RightPriceAuthen, 'warning');
+                isCheck = false;
+                return false;
+            }
+            // else if (StringToDouble(price) < reciprocalStock.get($('#modal_updateCondi_stock_cd').html() + "F")) {
+            // 	$("#modal_updateCondi_price").focus();
+            // 	shownotification('Warning', MessNotification.RightPriceMinus + reciprocalStock.get($('#modal_updateCondi_stock_cd').html() + "F"), 'warning');
+            // 	isCheck = false;
+            // 	return false;
+            // } 
+            // else if (StringToDouble(price) > reciprocalStock.get($('#modal_updateCondi_stock_cd').html() + "C")) {
+            // 	$("#modal_updateCondi_price").focus();
+            // 	shownotification('Warning', MessNotification.RightPricePlus + reciprocalStock.get($('#modal_updateCondi_stock_cd').html() + "C"), 'warning');
+            // 	isCheck = false;
+            // 	return false;
+            // }
+        }
+        if (price.includes('.') && price.split('.')[1].length > 1) {
+            shownotification('Warning', "Giá chỉ nhập sau phần thập phân 1 đơn vị", 'warning');
+            $('#modal_updateCondi_price').focus();
+            return;
+        }
+    }
+    if (parseInt(price)) {
+        priceType = 'LO';
+    } else {
+        priceType = price;
+        price = 0;
+    }
+    if (!isCheck) return;
+    // quantity
+    if ($("#modal_updateCondi_vol").val() == '') {
+        $("#modal_updateCondi_vol").focus();
+        shownotification('Warning', MessNotification.SoHopDong, 'warning');
+        isCheck = false;
+        return false;
+    } else if ($("#modal_updateCondi_vol").val() == '0') {
+        $("#modal_updateCondi_vol").focus();
+        shownotification('Warning', MessNotification.SoHopDongGT0, 'warning');
+        return;
+    }
+    // else if ($("#modal_updateCondi_vol").val() > 500) {
+    // 	$("#modal_updateCondi_vol").focus();
+    // 	shownotification('Warning', MessNotification.SoHopDongPlus, 'warning');
+    // 	isCheck = false;
+    // 	return false;
+    // }
+
+    // stop loss/tale profit
+    if (stopOrderType == "Stop Loss") {
+        // spread
+        var biendo = $('#modal_update_stop_losss_margin').val().replaceAll(',', '');
+        if (biendo && StringToDouble(biendo) == 0 && biendo != '0') {
+            shownotification('Warning', MessNotification.RightBienDoNumber, 'warning');
+            $('#modal_update_stop_losss_margin').focus();
+            return;
+        } else if (biendo.includes('.') && biendo.split('.')[1].length > 1) {
+            shownotification('Warning', "Biên độ cắt lỗ chỉ nhập sau dấu phẩy 1 đơn vị", 'warning');
+            $('#modal_update_stop_losss_margin').focus();
+            return;
+        }
+
+        // stop loss price
+        var stopLost = $('#modal_update_stop_loss').val().replaceAll(',', '');
+        if (!stopLost) {
+            shownotification('Warning', MessNotification.StopLostEmpty, 'warning');
+            $('#modal_update_stop_loss').focus();
+            return;
+        }
+        if (stopLost && StringToDouble(stopLost) == 0) {
+            $("#modal_update_stop_loss").focus();
+            shownotification('Warning', MessNotification.StopLostNumber, 'warning');
+            return;
+        }
+        if (stopLost && StringToDouble(stopLost) < reciprocalStock.get($('#modal_updateCondi_stock_cd').text() + "F")) {
+            $("#modal_update_stop_loss").focus();
+            shownotification('Warning', MessNotification.RightStopLostPriceMinus + reciprocalStock.get($('#modal_updateCondi_stock_cd').text() + "F"), 'warning');
+            return;
+        } else if (stopLost && StringToDouble(stopLost) > reciprocalStock.get($('#modal_updateCondi_stock_cd').text() + "C")) {
+            $("#modal_update_stop_loss").focus();
+            shownotification('Warning', MessNotification.RightStopLostPricePlus + reciprocalStock.get($('#modal_updateCondi_stock_cd').text() + "C"), 'warning');
+            return;
+        }
+        if (stopLost.includes('.') && stopLost.split('.')[1].length > 1) {
+            shownotification('Warning', "Giá chỉ nhập sau phần thập phân 1 đơn vị", 'warning');
+            $('#modal_update_stop_loss').focus();
+            return;
+        }
+
+        // check if data not change
+        if (stopLost == objCurrentOrder.TRIGGER_PRICE && biendo == objCurrentOrder.SPREAD) {
+            shownotification('Warning', MessNotification.CheckValueChange, 'warning');
+            $('#modal_update_stop_loss').focus();
+            return;
+        }
+    }
+
+    if (stopOrderType == 'Take Profit') {
+        // take profit
+        var takeProfit = $('#modal_update_take_profit').val();
+        if (!takeProfit) {
+            shownotification('Warning', MessNotification.TakeProfitEmpty, 'warning');
+            $('#modal_update_take_profit').focus();
+            return;
+        }
+
+        if (takeProfit && StringToDouble(takeProfit) == 0) {
+            $("#modal_update_take_profit").focus();
+            shownotification('Warning', MessNotification.TakeProfitNumber, 'warning');
+            return;
+        }
+        if (takeProfit && StringToDouble(takeProfit) < reciprocalStock.get($('#modal_updateCondi_stock_cd').text() + "F")) {
+            $("#modal_update_take_profit").focus();
+            shownotification('Warning', MessNotification.RightTakeProfitPriceMinus + reciprocalStock.get($('#modal_updateCondi_stock_cd').text() + "F"), 'warning');
+            return;
+        } else if (takeProfit && StringToDouble(takeProfit) > reciprocalStock.get($('#modal_updateCondi_stock_cd').text() + "C")) {
+            $("#modal_update_take_profit").focus();
+            shownotification('Warning', MessNotification.RightTakeProfitPricePlus + reciprocalStock.get($('#modal_updateCondi_stock_cd').text() + "C"), 'warning');
+            return;
+        }
+
+        if (takeProfit.includes('.') && takeProfit.split('.')[1].length > 1) {
+            shownotification('Warning', "Giá chỉ nhập sau phần thập phân 1 đơn vị", 'warning');
+            $('#modal_update_take_profit').focus();
+            return;
+        }
+
+        // check if data not change
+        if (takeProfit == objCurrentOrder.TRIGGER_PRICE) {
+            shownotification('Warning', MessNotification.CheckValueChange, 'warning');
+            $('#modal_update_stop_loss').focus();
+            return;
+        }
+    }
+
+    if (stopOrderType == 'Stop Order') {
+        if ($('#modal_update_trigger_price_index').val() == '') {
+            shownotification('Warning', MessNotification.StopOrder, 'warning');
+            $('#modal_update_trigger_price_index').focus();
+            return;
+        }
+        var soIndex = $('#modal_update_trigger_price_index').val();
+        if (StringToDouble(soIndex) == 0) {
+            shownotification('Warning', MessNotification.StopOrder, 'warning');
+            $('#modal_update_trigger_price_index').focus();
+            return;
+        }
+
+        if (soIndex.includes('.') && soIndex.split('.')[1].length > 1) {
+            shownotification('Warning', "Giá chỉ nhập sau phần thập phân 1 đơn vị", 'warning');
+            $('#modal_update_trigger_price_index').focus();
+            return;
+        }
+
+        if (StringToDouble(soIndex) <= reciprocalStock.get($('#modal_updateCondi_stock_cd').text() + "F")) {
+            shownotification('Warning', MessNotification.RightTriggerPriceMinus + reciprocalStock.get($('#modal_updateCondi_stock_cd').text() + "F"), 'warning');
+            $('#modal_update_trigger_price_index').focus();
+            return;
+        }
+        if (StringToDouble(soIndex) >= reciprocalStock.get($('#modal_updateCondi_stock_cd').text() + "C")) {
+            shownotification('Warning', MessNotification.RightTriggerPricePlus + reciprocalStock.get($('#modal_updateCondi_stock_cd').text() + "C"), 'warning');
+            $('#modal_update_trigger_price_index').focus();
+            return;
+        }
+
+        // check if data not change
+        var condition = $('#modal_update_trigger_price').val();
+        var currentCondi = condition == 'SOL' ? 'GTEQ' : 'LTEQ';
+
+        var isPlacedPriceChange = false;
+        if (priceType && priceType != 'LO' && !price) {
+            isPlacedPriceChange = priceType != objCurrentOrder.PRICE_TYPE ? true : false;
+        } else {
+            isPlacedPriceChange = price != objCurrentOrder.PLACED_PRICE ? true : false;
+        }
+        if (soIndex == objCurrentOrder.TRIGGER_PRICE && !isPlacedPriceChange && quantity == objCurrentOrder.QUANTITY && currentCondi == objCurrentOrder.RELATION) {
+            shownotification('Warning', MessNotification.CheckValueChange, 'warning');
+            $('#modal_update_stop_loss').focus();
+            return;
+        }
+    }
+
+    if (stopOrderType == "Arbitrage") {
+        if ($('#modal_update_ab_code').val() == $('#modal_updateCondi_stock_cd').val()) {
+            shownotification('Warning', MessNotification.Arbitrage, 'warning');
+            $('#modal_update_ab_code').css('display', '');
+            return;
+        }
+    }
+    var AccountPinCD = '';
+    // if ($('#account_updateCondi_pin_cd').val() == '') {
+    // 	$('#account_updateCondi_pin_cd').focus();
+    // 	shownotification('Warning', MessNotification.AuthenPIN, 'warning');
+    // 	isCheck = false;
+    // 	return false;
+    // }
+    // AccountPinCD = $('#account_updateCondi_pin_cd').val();
+
+    // end validate
+    if (stopOrderType == "Stop Order") {
+        pData = {
+            cmd: "co.stop.order.change",
+            accountNo: account,
+            pin: AccountPinCD,
+            orderId: orderId,
+            placedPrice: price,
+            priceType: priceType,
+            quantity: quantity,
+            relation: $('#modal_update_trigger_price').val() == 'SOL' ? "GTEQ" : "LTEQ",
+            triggerPrice: $('#modal_update_trigger_price_index').val()
+        };
+        if (priceType !== 'LO') {
+            delete pData.placedPrice;
+        }
+    }
+    if (stopOrderType == "Stop Loss") {
+        pData = {
+            cmd: "co.sltp.order.change",
+            accountNo: account,
+            pin: AccountPinCD,
+            channel: "H",
+            orderId: orderId,
+            triggerPrice: $('#modal_update_stop_loss').val(),
+            spread: $('#modal_update_stop_losss_margin').val(),
+        };
+    }
+    if (stopOrderType == 'Take Profit') {
+        pData = {
+            cmd: "co.sltp.order.change",
+            accountNo: account,
+            pin: AccountPinCD,
+            channel: "H",
+            orderId: orderId,
+            triggerPrice: $('#modal_update_take_profit').val()
+        };
+    }
+    pdata = {
+        group: group,
+        session: global.sid,
+        user: global.user,
+        extInfo: utils.fnGetDeviceInfo(),
+        language: "vi",
+        data: pData
+    }
+    var refOrderID = global.user + '.H.' + getRandom();
+    if (stopOrderType == "Arbitrage") {
+        pData = {
+            type: "string",
+            cmd: "Web.changeOrder",
+            pin: AccountPinCD,
+            orderType: "1",
+            orderId: orderId,
+            nprice: price,
+            nvol: StringToInt(quantity),
+            refId: refOrderID,
+            fisID: "",
+
+        };
+        var keysChkSum = ['price', 'volume', 'refId'];
+        var checkSum = global.sid;
+        $.each(keysChkSum, function (i, key) {
+            if (key != "volume") {
+                checkSum += pData[key]
+            } else {
+                checkSum += (StringToInt(pData[key]) * 100) + "vpbs@456"
+            }
+        });
+        var chkSum = MD5Hash(checkSum);
+        pdata = { group: groupOrder, user: global.user, session: global.sid, extInfo: utils.fnGetDeviceInfo(), checksum: chkSum, c: "H", language: "vi", data: pData };
+    }
+
+    // loại lệnh
+    // var ll = $('#modal_update_order_type').html();
+    if (side == 'SHORT') {
+        $('#modal_update_order_type').removeClass('orderTypeS').removeClass('orderTypeB').addClass('orderTypeS');
+    } else {
+        $('#modal_update_order_type').removeClass('orderTypeS').removeClass('orderTypeB').addClass('orderTypeB');
+    }
+
+    // var groupOrder = "FD";
+
+    // var refOrderID = global.user + '.H.' + getRandom();
+    // var pData = {type:"string",cmd:"Web.changeOrder",orderNo: orderId + "",refId: refOrderID + "",fisID:"",orderType:"1",pin:AccountPinCD + "",nvol: StringToInt(kl),nprice: gd + ""};
+
+
+    // var pdata = { group: groupOrder, user: global.user, session: global.sid, checksum: chkSum, c: "H", data: pData };
+    if (isCheck)
+        $.ajax({
+            type: "POST",
+            url: stopOrderType != "Arbitrage" ? urlCoreExt : urlCore,
+            cache: false,
+            data: JSON.stringify(pdata),
+            contentType: "application/json; charset=utf-8",
+            dataType: "json",
+            headers: {
+                'X-Device-New': getGssc()
+            },
+            success: function (vData) {
+                // if (vData.rs != 'FOException.InvalidPinException') {
+                // 	$("#updateOrderConditionModal").modal('hide');
+                // 	objCurrentOrder = {};
+                // }
+
+                if (vData.rc < 0) {
+                    // $('#account_updateCondi_pin_cd').val('');
+                    shownotification('Warning', getMessage(vData.rc, vData.rs), 'warning');
+                } else if (vData.rc == 0) {
+                    if (vData.rs != 'FOException.InvalidPinException') {
+                        // $('#account_updateCondi_pin_cd').val('');
+                        if (vData.data) {
+                            if (vData.data.code === "FOS-6063") {
+                                $("#updateOrderConditionModal").modal('hide');
+                                $("#modalWarningPSUpdateCCCD").modal("show");
+                            } else {
+                                if (!vData.data.message) {
+                                    shownotification('Warning', vData.rs, 'warning');
+                                } else {
+                                    shownotification('Warning', vData.data.message, 'warning');
+                                }
+                            }
+                        } else {
+                            shownotification('Warning', MessNotification.ErrorOrder, 'warning');
+                        }
+                    } else {
+                        shownotification('Warning', getMessage('-8005'), 'warning');
+                    }
+
+                } else {
+                    // if ($('#account_updateCondi_save_pin').is(':checked')) {
+                    // 	// save pin
+                    // 	localStorage.setItem('pin-value', $('#account_updateCondi_pin_cd').val());
+                    // 	global.AccountPinCD = $('#account_updateCondi_pin_cd').val();
+                    // } else {
+                    // 	global.AccountPinCD = '';
+                    // 	localStorage.removeItem('pin-value');
+                    // }
+                    shownotification('Infomation', MessNotification.ChangeOrder, 'warning');
+                    $("#updateOrderConditionModal").modal('hide');
+                    if (objOrderPanel.screen == 'advance') {
+                        objOrderPanel.showConditionOrderList();
+                    } else {
+                        if ($(".dslenh_tml").css("display") !== "none") {
+                            objOrderPanel.showOrderList();
+                        }
+                        if ($(".option1-scr").css("visibility") === "visible") {
+                            objOrderPanel.showOrderListView2();
+                        }
+                    }
+                }
+            },
+            error: function (e) {
+                // error
+            }
+        });
+}
+
+function updateOrder() {
+    var isCheck = true;
+    $('#updateOrderModal #btn_save_cancel_order').prop('disabled', true);
+    setTimeout(() => {
+        $('#updateOrderModal #btn_save_cancel_order').prop('disabled', false);
+    }, timeOutEnabledButton);
+    var price = $("#modal_update_price").val();
+    // console.log($('#modal_update_stock_cd').html() + "F")
+    // console.log(reciprocalStock.get($('#modal_update_stock_cd').html() + "F"), reciprocalStock.get($('#modal_update_stock_cd').val() + "C"));
+    // console.log(StringToDouble(price) < reciprocalStock.get($('#modal_update_stock_cd').html() + "F"));
+    // console.log(StringToDouble(price) > reciprocalStock.get($('#modal_update_stock_cd').val() + "C"));
+    if ($("#modal_update_price").val() == '') {
+        $("#modal_update_price").focus();
+        shownotification('Warning', MessNotification.RightPrice, 'warning');
+        isCheck = false;
+        $('#updateOrderModal #btn_save_cancel_order').prop('disabled', false);
+        return false;
+    } else {
+        // console.log(price, $('#modal_update_stock_cd').html(), reciprocalStock.get($('#modal_update_stock_cd').html() + "F"), reciprocalStock.get($('#modal_update_stock_cd').html() + "C"));
+        if (price != 'ATC' && price != 'ATO' && price != 'MAK' && price != 'MOK' && price != 'MTL') {
+            // console.log(reciprocalStock);
+            if (StringToDouble(price) == 0) {
+                $("#modal_update_price").focus();
+                shownotification('Warning', MessNotification.RightPriceAuthen, 'warning');
+                isCheck = false;
+                $('#updateOrderModal #btn_save_cancel_order').prop('disabled', false);
+                return false;
+            }
+            // else if (StringToDouble(price) < reciprocalStock.get($('#modal_update_stock_cd').html() + "F")) {
+            // 	$("#modal_update_price").focus();
+            // 	shownotification('Warning', MessNotification.RightPriceMinus + reciprocalStock.get($('#modal_update_stock_cd').html() + "F"), 'warning');
+            // 	isCheck = false;
+            // 	$('#updateOrderModal #btn_save_cancel_order').prop('disabled', false);
+            // 	return false;
+            // } 
+            // else if (StringToDouble(price) > reciprocalStock.get($('#modal_update_stock_cd').html() + "C")) {
+            // 	$("#modal_update_price").focus();
+            // 	shownotification('Warning', MessNotification.RightPricePlus + reciprocalStock.get($('#modal_update_stock_cd').html() + "C"), 'warning');
+            // 	isCheck = false;
+            // 	$('#updateOrderModal #btn_save_cancel_order').prop('disabled', false);
+            // 	return false;
+            // }
+        }
+    }
+    if (!isCheck) {
+        $('#updateOrderModal #btn_save_cancel_order').prop('disabled', false);
+        return;
+    }
+    let volume = $("#modal_update_vol").val();
+    if ($("#modal_update_vol").val() == '' || $("#modal_update_vol").val() == '0' || StringToDouble(volume) == 0) {
+        $("#modal_update_vol").focus();
+        shownotification('Warning', MessNotification.SoHopDong, 'warning');
+        isCheck = false;
+        $('#updateOrderModal #btn_save_cancel_order').prop('disabled', false);
+        return false;
+    }
+    // else if ($("#modal_update_vol").val() > 500) {
+    // 	$("#modal_update_vol").focus();
+    // 	shownotification('Warning', MessNotification.SoHopDongPlus, 'warning');
+    // 	isCheck = false;
+    // 	$('#updateOrderModal #btn_save_cancel_order').prop('disabled', false);
+    // 	return false;
+    // }
+
+    var AccountPinCD = '';
+    // if (global.AccountPinCD == '') {
+    // 	if ($('#account_update_pin_cd').val() == '') {
+    // 		$('#account_update_pin_cd').focus();
+    // 		shownotification('Warning', MessNotification.AuthenPIN, 'warning');
+    // 		isCheck = false;
+    // 		return false;
+    // 	}
+    // 	AccountPinCD = $('#account_update_pin_cd').val();
+    // } else {
+    // 	AccountPinCD = global.AccountPinCD;
+    // }
+
+    // update hopwj ddoongf
+    // {"group":"FD","user":"034353","session":"35a3ef03-3e86-4945-99d1-c551e02ed6e8","data":{"type":"string","cmd":"Web.changeOrder","orderNo":"1","refId":"03435380.06363461869493436","fisID":"","orderType":"1","pin":"xxx","nvol":1,"nprice":"910.1"}}
+
+    // số hiệu lệnh
+    var shl = $('#order_update_no_conf').val();
+    // loại lệnh
+    var ll = $('#modal_update_order_type').html();
+    if (ll == 'SHORT') {
+        $('#modal_update_order_type').removeClass('orderTypeS').removeClass('orderTypeB').addClass('orderTypeS');
+    } else {
+        $('#modal_update_order_type').removeClass('orderTypeS').removeClass('orderTypeB').addClass('orderTypeB');
+    }
+    // tài khoản
+    var tk = $('#modal_update_account').html();
+    // mã ck
+    var mack = $('#order_update_stock').val();
+    // khối lượng
+    var kl = $('#modal_update_vol').val();
+    var unmatchVol = $("#order_matchedVol").val();
+    var orderVol = StringToInt(kl) + StringToInt(unmatchVol);
+    // giá đặt
+    var gd = $('#modal_update_price').val();
+
+    var groupOrder = "FD";
+
+    var refOrderID = global.user + '.H.' + getRandom();
+    var pData = { type: "string", cmd: "Web.changeOrder", orderNo: shl + "", refId: refOrderID + "", fisID: "", orderType: "1", pin: AccountPinCD + "", nvol: orderVol, nprice: gd + "" };
+
+    var keysChkSum = ['price', 'volume', 'refId'];
+    var checkSum = global.sid;
+    $.each(keysChkSum, function (i, key) {
+        if (key != "volume") {
+            checkSum += pData[key]
+        } else {
+            checkSum += (StringToInt(pData[key]) * 100) + "vpbs@456"
+        }
+    });
+    var chkSum = MD5Hash(checkSum);
+
+    var pdata = { group: groupOrder, user: global.user, session: global.sid, extInfo: utils.fnGetDeviceInfo(), checksum: chkSum, c: "H", data: pData };
+    if (isCheck)
+        $.ajax({
+            type: "POST",
+            url: urlCore,
+            cache: false,
+            data: JSON.stringify(pdata),
+            contentType: "application/json; charset=utf-8",
+            dataType: "json",
+            headers: {
+                'X-Device-New': getGssc()
+            },
+            success: function (vData) {
+                $("#updateOrderModal").modal('hide');
+                if (vData.rc < 0) {
+                    if (vData.rc === -6063) {
+                        $("#modalWarningPSUpdateCCCD").modal("show");
+                    } else {
+                        shownotification('Warning', getMessage(vData.rc, vData.rs), 'warning');
+                    }
+                } else {
+                    // if ($('#account_save_pin').is(':checked')) {
+                    // 	// save pin
+                    // 	localStorage.setItem('pin-value', $('#account_pin_cd').val());
+                    // 	global.AccountPinCD = $('#account_pin_cd').val();
+                    // } else {
+                    // 	localStorage.removeItem('pin-value');
+                    // }
+                    shownotification('Infomation', MessNotification.ChangeOrder, 'warning');
+                    if (objOrderPanel.screen == 'advance') {
+                        objOrderPanel.showConditionOrderList();
+                    } else {
+                        if ($(".dslenh_tml").css("display") !== "none") {
+                            objOrderPanel.showOrderList();
+                        }
+                        if ($(".option1-scr").css("visibility") === "visible") {
+                            objOrderPanel.showOrderListView2();
+                        }
+                    }
+                }
+            },
+            error: function (e) {
+                $("#updateOrderModal").modal('hide');
+                // error
+            }
+        });
+}
+
+function openTSLog(pkOrderNo) {
+
+    $.ajax({
+        type: "GET",
+        url: ajaxURL + "/GetOrderLog.ashx",
+        cache: false,
+        data: {
+            orderNo: pkOrderNo
+        },
+        contentType: "application/json; charset=utf-8",
+        dataType: "json",
+        success: function (vData) {
+            //console.log(vData);   
+            // // {"cmd":"Web.Order.OrderDetail","oID":"","rc":1,"rs":"null","data":[{"time":"14:29:23","type":"MATCHED","vol":"4","price":"896","note":""}]}
+            if (vData.data != null) {
+                var tableInfo = "<table class='table table-hover'> \
+								<thead> \
+									<tr> \
+										<th style=\"border-bottom: none !important; border-top: none;\">Thời gian</th> \
+										<th style=\"border-bottom: none !important; border-top: none;\">Giá TT</th> \
+										<th style=\"border-bottom: none !important; border-top: none;\">Giá kích hoạt</th> \
+									</tr> \
+								</thead> \
+								<tbody> ";
+                try {
+                    $.each(vData.data, function (i, idata) {
+                        if (i == 0 || i == (vData.data.length - 1)) {
+                            tableInfo += "<tr> \
+								<td>"+ idata.time + "</td> \
+								<td>" + idata.cp + "</td> \
+								<td>" + idata.ep + "</td> \
+							</tr>";
+                        }
+                    });
+                } catch (error) {
+
+                }
+                tableInfo += "</tbody></table>";
+                bootbox.dialog({
+                    message: tableInfo,
+                    title: "Chi tiết lệnh trailing stop",
+                    className: "modal1"
+                });
+            } else {
+                shownotification('Warning', "Chưa có dữ liệu lệnh", 'warning');
+            }
+        },
+        error: function (err) {
+
+        }
+    });
+}
+
+function cancelAllOrderPending() {
+    if (objConfig.CONFIRM_ORDER) {
+        $('#cancelAllModal #cancel_all_order').prop('disabled', true);
+    }
+    let pData = {};
+    let url = {};
+    const account = $("#modal_account_cancel_all").val();
+    const symbol = $("#modal_stock_cd_cancel_all").val();
+    const cancelType = $('#cancel_order_type').val();
+
+    if (cancelType === 'order_condition') {
+        url = urlCoreExt;
+        pData = {
+            group: "O",
+            user: global.user,
+            session: global.sid,
+            extInfo: utils.fnGetDeviceInfo(),
+            language: lang,
+            data: {
+                cmd: "co.order.cancel.all",
+                accountNo: account,
+                symbol: symbol
+            }
+        };
+    } else {
+        url = urlCore;
+        pData = {
+            group: "FD",
+            user: global.user,
+            session: global.sid,
+            extInfo: utils.fnGetDeviceInfo(),
+            c: "H",
+            data: {
+                cmd: "Web.cancelAllOrder",
+                account: account,
+                symbol: 'ALL',
+                orderType: "0",
+                pin: ''
+            }
+        };
+    }
+
+    // call api cancel 
+    try {
+        $.ajax({
+            type: "POST",
+            url: url,
+            cache: false,
+            data: JSON.stringify(pData),
+            contentType: "application/json; charset=utf-8",
+            dataType: "json",
+            headers: {
+                'X-Device-New': getGssc()
+            },
+            timeout: timeoutDefault,
+            success: function (vData) {
+                if (!objConfig.CONFIRM_ORDER) {
+                    if (cancelType === 'order') {
+                        $('#btn_cancel_all_normal').prop('disabled', false);
+                    } else {
+                        $('#btn_cancel_all_order_condition').prop('disabled', false);
+                    }
+                }
+
+                let totalCanceled, totalPending
+
+                if (vData.rc < 0) {
+                    shownotification('Warning', getMessage(vData.rc, vData.rs), 'warning');
+                } else if (vData.rc === 0) {
+                    if (vData.rs != 'FOException.InvalidPinException') {
+                        // $('#account_updateCondi_pin_cd').val('');
+                        if (vData.data) {
+                            if (!vData.data.message) {
+                                shownotification('Warning', vData.rs, 'warning');
+                            } else {
+                                shownotification('Warning', vData.data.message, 'warning');
+                            }
+                        } else {
+                            // shownotification('Warning', MessNotification.ErrorOrder, 'warning');
+                        }
+                    } else {
+                        shownotification('Warning', getMessage('-8005'), 'warning');
+                    }
+                } else {
+                    $('#cancelAllModal').modal('hide')
+                    if (cancelType === 'order_condition') {
+                        totalCanceled = vData.data.totalCanceled
+                        totalPending = vData.data.totalPending
+                        if (totalPending === 0) {
+                            shownotification('Warning', 'Không có lệnh nào có thể hủy', 'warning');
+                        } else {
+                            shownotification('Warning', 'Đã hủy thành công ' + totalCanceled + '/' + totalPending + ' lệnh điều kiện', 'warning');
+                        }
+                    } else {
+                        shownotification('Warning', MessNotification.CancelAllOrderNormal, 'warning');
+                    }
+
+                    if (objOrderPanel.screen == 'advance') {
+                        objOrderPanel.showConditionOrderList();
+                    } else {
+                        objOrderPanel.showOrderList();
+                        if (window.location.toString().includes('#LiveBoard/1')) {
+                            objOrderPanel.showOrderListOption1();
+                        } else if ($(".option1-scr").css("visibility") === "visible") {
+                            objOrderPanel.showOrderListView2();
+                        }
+                    }
+                }
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                if (!objConfig.CONFIRM_ORDER) {
+                    if (cancelType === 'order') {
+                        $('#btn_cancel_all_normal').prop('disabled', false);
+                    } else {
+                        $('#btn_cancel_all_order_condition').prop('disabled', false);
+                    }
+                }
+
+                if (textStatus === "timeout") {
+                    $("#cancelAllModal").modal('hide');
+                    shownotification('Warning', 'Kết nối không ổn định, đề nghị khách hàng kiểm tra thông tin lệnh trên màn hình sổ lệnh', 'warning');
+                    if (objOrderPanel.screen != 'order') {
+                        openPanel('order');
+                    } else {
+                        objOrderPanel.showOrderList();
+                        if (window.location.toString().includes('#LiveBoard/1')) {
+                            objOrderPanel.showOrderListOption1();
+                        } else if ($(".option1-scr").css("visibility") === "visible") {
+                            objOrderPanel.showOrderListView2();
+                        }
+                    }
+                }
+            }
+        })
+    } catch (e) {
+        $("#cancelAllModal").modal('hide');
+
+        if (!objConfig.CONFIRM_ORDER) {
+            if (cancelType === 'order') {
+                $('#btn_cancel_all_normal').prop('disabled', false);
+            } else {
+                $('#btn_cancel_all_order_condition').prop('disabled', false);
+            }
+        }
+        console.log(e)
+    }
+}
+
+function onchangePrice() {
+    if ((!$("#modal_update_price").val() && priceLock) || parseFloat($("#modal_update_price").val()) != parseFloat(priceLock)) {
+        $("#modal_update_vol").addClass("disableVolLock");
+        $('#modal_update_vol').prop('readonly', true);
+    } else {
+        $("#modal_update_vol").removeClass("disableVolLock")
+        $('#modal_update_vol').prop('readonly', false);
+    }
+}
+
+function onchangeVol() {
+    if ((!$("#modal_update_vol").val() && volLock) || $("#modal_update_vol").val() != volLock) {
+        $("#modal_update_price").addClass("disablePrice");
+        $('#modal_update_price').prop('readonly', true);
+    } else {
+        $("#modal_update_price").removeClass("disablePrice");
+        $('#modal_update_price').prop('readonly', false);
+    }
+}
+
+
+objOrderPanel.clearKeyOrder = function () {
+    // load danh sach lenh
+    keyOrder.clear();
+    orderQueueMissingData = [];
+    objOrderPanel.orderClear();
+}
