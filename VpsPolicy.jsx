@@ -148,6 +148,24 @@ export default function VpsPolicy() {
     return `${y}-${m}-${d}`
   }
 
+  // Helper format Date Time sang dd/MM/yyyy HH:mm:ss
+  const formatDateTime = (dateStr) => {
+    if (!dateStr) return '-'
+    try {
+      const date = new Date(dateStr)
+      if (isNaN(date.getTime())) return dateStr
+      const day = String(date.getDate()).padStart(2, '0')
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const year = date.getFullYear()
+      const hours = String(date.getHours()).padStart(2, '0')
+      const minutes = String(date.getMinutes()).padStart(2, '0')
+      const seconds = String(date.getSeconds()).padStart(2, '0')
+      return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`
+    } catch {
+      return dateStr
+    }
+  }
+
   // 3. React Query: Fetch VPS policies list với phân trang phía server
   const { data: searchResult = { content: [], totalElements: 0, totalPages: 0 }, isLoading: isSearchLoading, isError, error } = useQuery({
     queryKey: ['vps-policies', searchParams, currentPage, itemsPerPage],
@@ -164,9 +182,9 @@ export default function VpsPolicy() {
     staleTime: 10000
   })
 
-  const policies = Array.isArray(searchResult) ? searchResult : (searchResult.content || [])
-  const totalItems = Array.isArray(searchResult) ? searchResult.length : (searchResult.totalElements || 0)
-  const totalPages = Array.isArray(searchResult) ? Math.ceil(searchResult.length / itemsPerPage) : (searchResult.totalPages || 0)
+  const policies = searchResult?.content || (Array.isArray(searchResult) ? searchResult : [])
+  const totalItems = searchResult?.totalElements !== undefined ? Number(searchResult.totalElements) : policies.length
+  const totalPages = searchResult?.totalPages !== undefined ? Number(searchResult.totalPages) : Math.ceil(policies.length / itemsPerPage)
 
   // 4. Mutation to create/update VPS policy (creates a ticket)
   const createMutation = useMutation({
@@ -354,7 +372,7 @@ export default function VpsPolicy() {
   }
 
   const vpsColumns = [
-    { header: 'STT', render: (_, classes, index) => startIndex + index + 1, width: '60px' },
+    { header: 'STT', render: (_, classes, index) => startIndex + index + 1, width: '50px' },
     { 
       header: 'Tên nghiệp vụ', 
       render: (p) => {
@@ -362,14 +380,14 @@ export default function VpsPolicy() {
         return op ? op.name : (p.operatorName || p.operatorCode)
       },
       style: { fontWeight: 600 }, 
-      width: '2.2fr' 
+      width: '1.8fr' 
     },
     { 
       header: 'Mã Code', 
       render: (p, classes) => (
         <span className={`${classes.badge} ${classes.badgeInfo}`}>{p.operatorCode}</span>
       ),
-      width: '1.4fr'
+      width: '1.2fr'
     },
     { 
       header: 'OTP', 
@@ -378,7 +396,7 @@ export default function VpsPolicy() {
           {Number(p.otpStatus) === 0 ? 'Có' : 'Không'}
         </span>
       ),
-      width: '0.8fr'
+      width: '0.6fr'
     },
     { 
       header: 'Điều kiện OTP', 
@@ -386,7 +404,7 @@ export default function VpsPolicy() {
         if (Number(p.otpStatus) !== 0) return '-'
         return Number(p.otpCondition) === 0 ? 'Tất cả' : `amount >= ${Number(p.otpCondition).toLocaleString('vi-VN')}`
       },
-      width: '1.6fr' 
+      width: '1.3fr' 
     },
     { 
       header: 'BIO', 
@@ -395,7 +413,7 @@ export default function VpsPolicy() {
           {Number(p.bioStatus) === 0 ? 'Có' : 'Không'}
         </span>
       ),
-      width: '0.8fr'
+      width: '0.6fr'
     },
     { 
       header: 'Điều kiện BIO', 
@@ -403,7 +421,7 @@ export default function VpsPolicy() {
         if (Number(p.bioStatus) !== 0) return '-'
         return Number(p.bioCondition) === 0 ? 'Tất cả' : `amount >= ${Number(p.bioCondition).toLocaleString('vi-VN')}`
       },
-      width: '1.6fr' 
+      width: '1.3fr' 
     },
     {
       header: 'Trạng thái duyệt',
@@ -414,7 +432,7 @@ export default function VpsPolicy() {
         if (status === 2) return <span className={`${classes.badge} ${classes.badgeDanger}`}>Từ chối</span>
         return <span className={`${classes.badge} ${classes.badgeSecondary}`}>Chưa duyệt</span>
       },
-      width: '1.3fr'
+      width: '1.1fr'
     },
     {
       header: 'Hiệu lực',
@@ -425,7 +443,25 @@ export default function VpsPolicy() {
         if (status === 2) return <span className={`${classes.badge} ${classes.badgeDanger}`}>Từ chối</span>
         return <span className={`${classes.badge} ${classes.badgeSecondary}`}>Chưa hiệu lực</span>
       },
+      width: '1fr'
+    },
+    {
+      header: 'Ticket ID',
+      render: (p) => p.ticketId || '-',
+      style: { fontSize: '12px', color: 'var(--text-muted)' },
       width: '1.2fr'
+    },
+    {
+      header: 'Ngày tạo',
+      render: (p) => formatDateTime(p.createdDate),
+      style: { fontSize: '12px', color: 'var(--text-muted)' },
+      width: '1.4fr'
+    },
+    {
+      header: 'Ngày hiệu lực',
+      render: (p) => formatDateTime(p.lastModifiedDate),
+      style: { fontSize: '12px', color: 'var(--text-muted)' },
+      width: '1.4fr'
     },
     { 
       header: 'Thao tác', 
@@ -479,7 +515,7 @@ export default function VpsPolicy() {
           </div>
         )
       },
-      width: '1.6fr'
+      width: '1.4fr'
     }
   ]
 
@@ -625,7 +661,7 @@ export default function VpsPolicy() {
         />
 
         {/* Pagination */}
-        {isPaginationEnabled && totalPages > 1 && (
+        {isPaginationEnabled && totalItems > 0 && (
           <div className={styles.paginationBar}>
             <div className={styles.paginationInfo}>
               Hiển thị <strong>{startIndex + 1}</strong> - <strong>{Math.min(endIndex, totalItems)}</strong> trên tổng số <strong>{totalItems}</strong> chính sách
